@@ -1,0 +1,8 @@
+{
+    "partition": "lenovo",
+	"modules": "module load intel/mkl-11.2.3 mpi/impi-2018.2.199\nexport PATH=~/qe-6.6/bin/:$PATH",
+	"N_pw": 1,
+	"n_pw": 20,
+	"N_ph": 1,
+	"n_ph": 40
+}

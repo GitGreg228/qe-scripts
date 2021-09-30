@@ -5,6 +5,9 @@ __pycache__/
 
 desktop.ini
 *.idea/
+*.json
+POSCAR
+CONTCAR
 
 # C extensions
 *.so

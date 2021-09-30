@@ -2,8 +2,7 @@
 
 ## Crystal structure symmetrizer
 
-Common crystal structure symmetrizers allows to symmetrize a crystal with specified tolerances,
-however, they are inconvenient if the task is to see how the symmetry changes with tolerance parameter.
+Common crystal structure symmetrizers (for example, https://uspex-team.org/online_utilities/poscar2cif/) allow to symmetrize a crystal with specified tolerances, however, they are inconvenient if the task is to see how the symmetry changes with tolerance parameter.
 
 The script `symmetrize.py` analyzes the symmetry on given range of tolerances with a given step.
 

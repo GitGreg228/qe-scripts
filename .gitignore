@@ -8,6 +8,8 @@ desktop.ini
 *.json
 POSCAR
 CONTCAR
+*.opt
+*.sh
 
 # C extensions
 *.so

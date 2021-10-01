@@ -136,7 +136,7 @@ input_opt = f"""&control
    cell_dynamics = 'bfgs',
    cell_factor = 2.5,
    press = {args.pressure},
-   cell_dofree = 'xyz',
+   cell_dofree = 'ibrav',
  /
 ATOMIC_SPECIES
 {species}
@@ -181,7 +181,7 @@ script1 = f"""#!/bin/sh
 
 echo "OPT of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix} 
 
-mpirun $(which pw.x) -in $PWD/input.opt &> \$PWD/output.opt.${prefix} 
+mpirun $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
 
 echo "OPT of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 

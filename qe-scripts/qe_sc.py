@@ -4,6 +4,7 @@ from pymatgen.io.vasp.inputs import Kpoints
 from pymatgen.io.pwscf import PWInput
 import numpy as np
 import argparse
+import shutil
 import json
 import sys
 import os
@@ -20,7 +21,9 @@ parser.add_argument('--poscar', type=str, default='POSCAR', help='POSCAR file na
 parser.add_argument('--note', type=str, default='', help='note to add into script')
 parser.add_argument('--o', type=bool, default=True, help='Overwrite all files')
 parser.add_argument('--press', nargs='+', default=2000, help='Pressure(s) in kBar')
-parser.add_argument('--kppa', type=int, default=50000, help='K-points per cubic Angstrom (?)')
+parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
+parser.add_argument('--primitive', type=bool, default=True, help='if print primitive structure')
+parser.add_argument('--dyn', type=str, default='ibrav', help='cell dynamics')
 args = parser.parse_args()
 
 if args.path == '.':
@@ -45,12 +48,7 @@ def overwrite(path, name, content, o):
             f.close()
 
 
-def create_input_opt(tol, path, poscar, note, o, pressure, kppa):
-    """
-    Reading structure, collecting space group and inequivalently positioned atoms
-    """
-
-    structure = IStructure.from_file(os.path.join(path, poscar))
+def formulas(structure):
     formula = structure.formula.replace(' ', '')
     res = re.split('(\d+)', formula)
     prefix = str()
@@ -62,9 +60,18 @@ def create_input_opt(tol, path, poscar, note, o, pressure, kppa):
             short = short + c
             if not c == '1':
                 prefix = prefix + c
+    return prefix, short
+
+
+def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
+    """
+    Reading structure, collecting space group and inequivalently positioned atoms
+    """
+
+    prefix = formulas(structure)[0]
+    short = formulas(structure)[1]
     short = short + note
 
-    analyzer = SpacegroupAnalyzer(structure, symprec=tol)
     sg = str(analyzer.get_space_group_number())
 
     refined = analyzer.get_refined_structure()
@@ -115,49 +122,49 @@ def create_input_opt(tol, path, poscar, note, o, pressure, kppa):
     """
 
     input_opt = f"""&control
-        calculation='vc-relax'
-        restart_mode='from_scratch',
-        prefix={prefix},
-        pseudo_dir = '.',
-        outdir='.',
-        wf_collect = .true.,
-        nstep = 9999,
-    /
-    &system
-            space_group={sg},
-            A={a},
-            B={b},
-            C={c},
-            cosAB={cosAB},
-            cosBC={cosBC},
-            cosAC={cosAC},
-            nat={nat},
-            ntyp={ntyp},
-            ecutwfc=80.0,
-            occupations='smearing',
-            degauss=0.05,
-     /
-     &electrons
-        conv_thr =  5.0d-7,
-        mixing_beta = 0.6,
-        electron_maxstep = 9999,
-        diagonalization = 'cg',
-     /
-     &IONS
-      ion_dynamics='bfgs',
-     /
-     &CELL
-       cell_dynamics = 'bfgs',
-       cell_factor = 2.5,
-       press = {pressure},
-       cell_dofree = 'ibrav',
-     /
-    ATOMIC_SPECIES
-    {species}
-    ATOMIC_POSITIONS (crystal_sg)
-    {positions}
-    K_POINTS {automatic}
-     {kpoints}  {shift}""".format(automatic=automatic)
+    calculation='vc-relax'
+    restart_mode='from_scratch',
+    prefix={prefix},
+    pseudo_dir = '.',
+    outdir='.',
+    wf_collect = .true.,
+    nstep = 9999,
+/
+&system
+        space_group={sg},
+        A={a},
+        B={b},
+        C={c},
+        cosAB={cosAB},
+        cosBC={cosBC},
+        cosAC={cosAC},
+        nat={nat},
+        ntyp={ntyp},
+        ecutwfc=80.0,
+        occupations='smearing',
+        degauss=0.015,
+ /
+ &electrons
+    conv_thr =  5.0d-7,
+    mixing_beta = 0.6,
+    electron_maxstep = 9999,
+    diagonalization = 'cg',
+ /
+ &IONS
+  ion_dynamics='bfgs',
+ /
+ &CELL
+   cell_dynamics = 'bfgs',
+   cell_factor = 2.5,
+   press = {pressure},
+   cell_dofree = '{dyn}',
+ /
+ATOMIC_SPECIES
+{species}
+ATOMIC_POSITIONS (crystal_sg)
+{positions}
+K_POINTS {automatic}
+ {kpoints}  {shift}""".format(automatic=automatic)
 
     overwrite(path, 'input.opt', input_opt, o)
 
@@ -171,7 +178,8 @@ def create_input_opt(tol, path, poscar, note, o, pressure, kppa):
         "N_pw": 1,
         "n_pw": 20,
         "N_ph": 1,
-        "n_ph": 40
+        "n_ph": 40,
+        "pp_path": "../PP"
     }
 
     if os.path.isfile(os.path.join(path, 'system.json')):
@@ -181,36 +189,59 @@ def create_input_opt(tol, path, poscar, note, o, pressure, kppa):
     else:
         system = default_system
 
+    if os.path.isdir(system['pp_path']):
+        for fname in os.listdir(system['pp_path']):
+            if '.UPF' in fname:
+                tmp_src = os.path.join(system['pp_path'], fname)
+                if os.path.isfile(tmp_src):
+                    shutil.copy2(tmp_src, path)
+
     script1 = f"""#!/bin/sh
-    #SBATCH -o qe.out1
-    #SBATCH -p {system['partition']}
-    #SBATCH -J r{short}
-    #SBATCH -N {system['N_pw']}
-    #SBATCH -n {system['n_pw']}
-    
-    {system['modules']}
-    
-    echo "OPT of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix} 
-    
-    $(which mpirun) $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
-    
-    echo "OPT of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
-    
-    """.format()
+#SBATCH -o qe.out1 -e qe.err1
+#SBATCH -p {system['partition']}
+#SBATCH -J r{short}
+#SBATCH -N {system['N_pw']}
+#SBATCH -n {system['n_pw']}
+
+{system['modules']}
+
+echo "OPT of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix} 
+
+$(which mpirun) $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
+
+echo "OPT of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+""".format()
 
     overwrite(path, 'script1.sh', script1, o)
 
 
+print('Reading structure from ' + os.path.join(pwd, args.poscar))
+structure = IStructure.from_file(os.path.join(pwd, args.poscar))
+prefix = formulas(structure)[0]
+analyzer = SpacegroupAnalyzer(structure, symprec=args.tol)
+print(f'Found {prefix}, which has {analyzer.get_space_group_symbol()} '
+      f'({str(analyzer.get_space_group_number())}) '
+      f'symmetry (with {args.tol} tolerance).'.format())
+if args.primitive:
+    primitive = analyzer.find_primitive()
+    if len(primitive.sites) != len(structure.sites):
+        print('Found primitive structure:')
+        print(primitive)
+        print('which is now will be used.')
+        structure = primitive
+
 if len(args.press) == 1:
+    print('Only one pressure is given, output files will be created right here.')
     pressure = arr_str(args.press)
-    create_input_opt(args.tol, pwd, args.poscar, args.note, args.o, pressure, args.kppa)
+    create_input_opt(args.tol, pwd, structure, args.note, args.o, pressure, args.kppa, args.dyn)
 elif len(args.press) > 1:
+    print('Multiple pressures are given, creating folder for each pressure...')
     for p in args.press:
         tmp_path = os.path.join(pwd, p)
         if not os.path.isdir(tmp_path):
             os.mkdir(tmp_path)
         note = '_' + p + args.note
-        poscar = os.path.join('..', args.poscar)
         pressure = arr_str(p)
-        create_input_opt(args.tol, tmp_path, poscar, note, args.o, pressure, args.kppa)
+        create_input_opt(args.tol, tmp_path, structure, note, args.o, pressure, args.kppa, args.dyn)
 

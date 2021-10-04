@@ -1,12 +1,10 @@
 from pymatgen.core.structure import IStructure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.vasp.inputs import Kpoints
-from pymatgen.io.pwscf import PWInput
 import numpy as np
 import argparse
 import shutil
 import json
-import sys
 import os
 import re
 

@@ -1,7 +1,7 @@
 from pymatgen.core.structure import IStructure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.vasp.inputs import Kpoints
-from pymatgen.io.pwscf import PWInput
+from math import ceil
 import numpy as np
 import argparse
 import shutil
@@ -11,8 +11,14 @@ import re
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str, default='.', help='Path to a folder with POSCAR')
+parser.add_argument('--tol', type=float, default='0.2', help='tolerance')
+parser.add_argument('--note', type=str, default='', help='note to add into script')
+parser.add_argument('--o', type=bool, default=True, help='Overwrite all files')
 parser.add_argument('--tol_max', type=float, default=0.5, help='Maximum allowed tolerance during analysis (NOT CREATING FILES)')
 parser.add_argument('--tol_step', type=float, default=0.01, help='Tolerance step during analysis (NOT CREATING FILES)')
+parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
+parser.add_argument('--q', nargs='+', default=['2x2x2'], help='Desired q-points meshes for phonon calculations')
+parser.add_argument('--multiplier', type=int, default=3, help='Multiplier to q-point mesh (to create k-point mesh)')
 args = parser.parse_args()
 
 if args.path == '.':
@@ -72,7 +78,7 @@ def get_contcar(path):
         if sp_dict[sp] != 1:
             prefix = prefix + str(sp_dict[sp])
     prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}'
-    with open(os.path.join(path, '../CONTCAR'), 'w') as f:
+    with open(os.path.join(os.path.dirname(path), 'CONTCAR'), 'w') as f:
         f.write(prefix_str + '\n' + alat + '\n')
         for vec in lattice_str:
             f.write(vec)
@@ -82,10 +88,10 @@ def get_contcar(path):
         f.close()
 
 
-def analyze_symmetry(structure):
+def analyze_symmetry(structure, tol_max, tol_step):
     prev_number = 0
     tols = dict()
-    for tol in np.arange(0.01, args.tol_max, args.tol_step):
+    for tol in np.arange(0.01, tol_max, tol_step):
         analyzer = SpacegroupAnalyzer(structure, symprec=tol)
         number = analyzer.get_space_group_number()
         if number > prev_number:
@@ -126,7 +132,7 @@ def formulas(structure):
     return prefix, short
 
 
-def create_input_scf(tol, path, structure, note, o, kppa):
+def create_input_scf(tol, path, structure, note, o, kpoints, shift='0 0 0'):
     """
     Reading structure, collecting space group and inequivalently positioned atoms
     """
@@ -173,11 +179,6 @@ def create_input_scf(tol, path, structure, note, o, kppa):
 
     automatic = '{automatic}'
 
-    _kpoints = Kpoints.automatic_density(structure, kppa=kppa)
-
-    kpoints = arr_str(_kpoints.kpts[0])
-    shift = arr_str(_kpoints.kpts_shift)
-
     """
     Writing input.opt
     """
@@ -223,7 +224,7 @@ K_POINTS {automatic}
         "n_pw": 20,
         "N_ph": 1,
         "n_ph": 40,
-        "pp_path": "../PP"
+        "pp_path": "../../PP"
     }
 
     if os.path.isfile(os.path.join(path, 'system.json')):
@@ -260,6 +261,27 @@ echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix}
     overwrite(path, 'script2.sh', script2, o)
 
 
+def create_meshes(q, tol, path, structure, note, o, multiplier, kppa):
+    for mesh in q:
+        _tmp_path = os.path.join(path, mesh)
+        if not os.path.isdir(_tmp_path):
+            os.mkdir(_tmp_path)
+        res = re.split('(\d+)', mesh)
+        mesh_lst = list()
+        for each in res:
+            if each.isnumeric():
+                mesh_lst.append(each)
+        assert len(mesh_lst) == 3
+        qpoints = str()
+        for _q in mesh_lst:
+            qpoints = qpoints + str(multiplier * int(_q)) + ' '
+        kpoints = str()
+        _kpoints = Kpoints.automatic_density(structure, kppa=kppa).kpts[0]
+        for i, _q in enumerate(mesh_lst):
+            kpoints = kpoints + str(ceil(_kpoints[i]/int(_q))*int(_q)) + ' '
+        create_input_scf(tol, _tmp_path, structure, note, o, kpoints)
+
+
 multiple = bool()
 tols = dict()
 
@@ -268,7 +290,8 @@ for fname in os.listdir(pwd):
         print(f'Found {fname} in {os.path.basename(pwd)}, creating CONTCAR from here')
         get_contcar(os.path.join(pwd, fname))
         structure = IStructure.from_file(os.path.join(pwd, 'CONTCAR'))
-        tols = analyze_symmetry(structure)
+        tols = analyze_symmetry(structure, args.tol_max, args.tol_step)
+        create_meshes(args.q, args.tol, pwd, structure, args.note, args.o, args.multiplier, args.kppa)
         with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
             json.dump(tols, f, ensure_ascii=False, indent=4)
             f.close()
@@ -286,7 +309,8 @@ if multiple:
                     print(f'Found {_fname} in {os.path.basename(tmp_path)}, creating CONTCAR from here')
                     get_contcar(os.path.join(tmp_path, _fname))
                     structure = IStructure.from_file(os.path.join(tmp_path, 'CONTCAR'))
-                    tols[fname] = analyze_symmetry(structure)
+                    tols[fname] = analyze_symmetry(structure, args.tol_max, args.tol_step)
+                    create_meshes(args.q, args.tol, tmp_path, structure, args.note, args.o, args.multiplier, args.kppa)
     with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
         json.dump(tols, f, ensure_ascii=False, indent=4)
         f.close()

@@ -71,7 +71,7 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     prefix = formulas(structure)[0]
     short = formulas(structure)[1]
     short = short + note
-
+    analyzer = SpacegroupAnalyzer(structure, symprec=tol)
     sg = str(analyzer.get_space_group_number())
 
     refined = analyzer.get_refined_structure()
@@ -224,6 +224,7 @@ print(f'Found {prefix}, which has {analyzer.get_space_group_symbol()} '
       f'({str(analyzer.get_space_group_number())}) '
       f'symmetry (with {args.tol} tolerance).'.format())
 if args.primitive:
+    analyzer = SpacegroupAnalyzer(structure, symprec=0.2)
     primitive = analyzer.find_primitive()
     if len(primitive.sites) != len(structure.sites):
         print('Found primitive structure:')

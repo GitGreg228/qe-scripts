@@ -55,3 +55,4 @@ for tol in np.arange(0.01, args.tol_max, args.tol_step):
 
 with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
     json.dump(tols, f, ensure_ascii=False, indent=4)
+    f.close()

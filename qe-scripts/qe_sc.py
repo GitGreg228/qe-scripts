@@ -12,6 +12,13 @@ import re
 Parsing arguments
 """
 
+
+def boolean_string(s):
+    if s not in {'False', 'True'}:
+        raise ValueError('Not a valid boolean string')
+    return s == 'True'
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--tol', type=float, default='0.2', help='tolerance')
 parser.add_argument('--path', type=str, default='.', help='Path to a folder with POSCAR')
@@ -20,7 +27,7 @@ parser.add_argument('--note', type=str, default='', help='note to add into scrip
 parser.add_argument('--o', type=bool, default=True, help='Overwrite all files')
 parser.add_argument('--press', nargs='+', default=2000, help='Pressure(s) in kBar')
 parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
-parser.add_argument('--primitive', type=bool, default=True, help='if print primitive structure')
+parser.add_argument('--primitive', default=True, type=boolean_string, help='if print primitive structure')
 parser.add_argument('--dyn', type=str, default='ibrav', help='cell dynamics')
 args = parser.parse_args()
 

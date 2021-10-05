@@ -117,7 +117,7 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
 
     automatic = '{automatic}'
 
-    _kpoints = Kpoints.automatic_density(structure, kppa=kppa)
+    _kpoints = Kpoints.automatic_density(refined, kppa=kppa)
 
     kpoints = arr_str(_kpoints.kpts[0])
     shift = arr_str(_kpoints.kpts_shift)

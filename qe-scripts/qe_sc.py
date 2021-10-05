@@ -28,7 +28,7 @@ parser.add_argument('--o', type=bool, default=True, help='Overwrite all files')
 parser.add_argument('--press', nargs='+', default=2000, help='Pressure(s) in kBar')
 parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
 parser.add_argument('--primitive', default=True, type=boolean_string, help='if print primitive structure')
-parser.add_argument('--dyn', type=str, default='ibrav', help='cell dynamics')
+parser.add_argument('--dyn', type=str, default='all', help='cell dynamics')
 args = parser.parse_args()
 
 if args.path == '.':
@@ -79,7 +79,7 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     analyzer = SpacegroupAnalyzer(structure, symprec=tol)
     sg = str(analyzer.get_space_group_number())
 
-    refined = analyzer.get_refined_structure()
+    refined = analyzer.get_primitive_standard_structure()
 
     a = round(refined.lattice.a, 10)
     b = round(refined.lattice.b, 10)

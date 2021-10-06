@@ -7,12 +7,19 @@ import argparse
 import json
 import os
 
+
+def boolean_string(s):
+    if s not in {'False', 'True'}:
+        raise ValueError('Not a valid boolean string')
+    return s == 'True'
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--tol_max', type=float, default=0.5, help='Maximum allowed tolerance')
 parser.add_argument('--tol_step', type=float, default=0.01, help='Tolerance step')
 parser.add_argument('--path', type=str, default='.', help='Path to a folder with POSCAR')
 parser.add_argument('--poscar', type=str, default='POSCAR', help='POSCAR file name')
-parser.add_argument('--q', type=bool, default=False, help='Quiet mode, create only symm.json')
+parser.add_argument('--q', type=boolean_string, default=False, help='Quiet mode, create only symm.json')
 
 args = parser.parse_args()
 

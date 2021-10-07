@@ -1,6 +1,7 @@
 from pymatgen.core.structure import IStructure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 from pymatgen.io.vasp.inputs import Kpoints
+from pymatgen.io.cif import CifWriter
 from math import ceil
 import numpy as np
 import argparse
@@ -9,16 +10,24 @@ import json
 import os
 import re
 
+
+def boolean_string(s):
+    if s not in {'False', 'True'}:
+        raise ValueError('Not a valid boolean string')
+    return s == 'True'
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--path', type=str, default='.', help='Path to a folder with POSCAR')
 parser.add_argument('--tol', type=float, default='0.2', help='tolerance')
 parser.add_argument('--note', type=str, default='', help='note to add into script')
-parser.add_argument('--o', type=bool, default=True, help='Overwrite all files')
+parser.add_argument('--o', type=boolean_string, default=True, help='Overwrite all files')
 parser.add_argument('--tol_max', type=float, default=0.5, help='Maximum allowed tolerance during analysis (NOT CREATING FILES)')
 parser.add_argument('--tol_step', type=float, default=0.01, help='Tolerance step during analysis (NOT CREATING FILES)')
 parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
-parser.add_argument('--q', nargs='+', default=['2x2x2'], help='Desired q-points meshes for phonon calculations')
+parser.add_argument('--q', nargs='+', default=[], help='Desired q-points meshes for phonon calculations')
 parser.add_argument('--multiplier', type=int, default=3, help='Multiplier to q-point mesh (to create k-point mesh)')
+parser.add_argument('--save_cif', type=boolean_string, default=True, help='create CIF file')
 args = parser.parse_args()
 
 if args.path == '.':
@@ -27,7 +36,19 @@ else:
     pwd = os.path.abspath(args.path)
 
 
-def get_contcar(path):
+def overwrite(path, name, content, o):
+    tmp_path = os.path.join(path, name)
+    if not os.path.isfile(tmp_path):
+        with open(tmp_path, 'w') as f:
+            f.write(content)
+            f.close()
+    elif o:
+        with open(tmp_path, 'w') as f:
+            f.write(content)
+            f.close()
+
+
+def get_contcar(path, o):
     idx_s = int()
     idx_v = int()
     idx_d = int()
@@ -60,14 +81,16 @@ def get_contcar(path):
     lattice_str = list()
     for vec in lattice:
         _vec = vec.split()
-        lattice_str.append('\t' + _vec[0] + '\t' + _vec[1] + '\t' + _vec[2] + '\n')
+        lattice_str.append('\t' + _vec[0] + '\t' + _vec[1] + '\t' + _vec[2])
+    lattice_str = "\n".join(lattice_str)
     atom_pos = lines[idx_a+1:idx_f]
     atoms_str = list()
     species = list()
     for a in atom_pos:
         _a = a.split()
         species.append(_a[0])
-        atoms_str.append('\t' + _a[1] + '\t' + _a[2] + '\t' + _a[3]+'\n')
+        atoms_str.append('\t' + _a[1] + '\t' + _a[2] + '\t' + _a[3])
+    atoms_str = "\n".join(atoms_str)
     sp_dict = {i: species.count(i) for i in species}
     prefix = str()
     species_str = ['', '']
@@ -78,17 +101,12 @@ def get_contcar(path):
         if sp_dict[sp] != 1:
             prefix = prefix + str(sp_dict[sp])
     prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}'
-    with open(os.path.join(os.path.dirname(path), 'CONTCAR'), 'w') as f:
-        f.write(prefix_str + '\n' + alat + '\n')
-        for vec in lattice_str:
-            f.write(vec)
-        f.write(species_str[0] + '\n' + species_str[1] + '\nDirect\n')
-        for a in atoms_str:
-            f.write(a)
-        f.close()
+    content = prefix_str + '\n' + alat + '\n' + lattice_str + \
+              '\n' + species_str[0] + '\n' + species_str[1] + '\nDirect\n' + atoms_str
+    overwrite(os.path.dirname(path), 'CONTCAR', content, o)
 
 
-def analyze_symmetry(structure, tol_max, tol_step):
+def analyze_symmetry(structure, tol_max, tol_step, save_cif, path):
     prev_number = 0
     tols = dict()
     for tol in np.arange(0.01, tol_max, tol_step):
@@ -97,6 +115,10 @@ def analyze_symmetry(structure, tol_max, tol_step):
         if number > prev_number:
             symbol = analyzer.get_space_group_symbol()
             tols["{:0.2f}".format(tol)] = str(number) + '(' + symbol + ')'
+            if save_cif:
+                name = f'{formulas(structure)[0]}_{os.path.basename(path)}' \
+                       f'_{analyzer.get_space_group_number()}.cif'.format()
+                CifWriter(analyzer.get_symmetrized_structure(), symprec=tol).write_file(os.path.join(path, name))
         prev_number = number
     return tols
 
@@ -180,7 +202,7 @@ def create_input_scf(tol, path, structure, note, o, kpoints, shift='0 0 0'):
     automatic = '{automatic}'
 
     """
-    Writing input.opt
+    Writing input.scf
     """
 
     input_scf = f"""&control
@@ -214,7 +236,7 @@ K_POINTS {automatic}
     overwrite(path, 'input.scf', input_scf, o)
 
     """
-    Writing script1.sh
+    Writing script2.sh
     """
 
     default_system = {
@@ -288,10 +310,12 @@ tols = dict()
 for fname in os.listdir(pwd):
     if 'output.opt' in fname:
         print(f'Found {fname} in {os.path.basename(pwd)}, creating CONTCAR from here')
-        get_contcar(os.path.join(pwd, fname))
+        get_contcar(os.path.join(pwd, fname), args.o)
         structure = IStructure.from_file(os.path.join(pwd, 'CONTCAR'))
-        tols = analyze_symmetry(structure, args.tol_max, args.tol_step)
-        create_meshes(args.q, args.tol, pwd, structure, args.note, args.o, args.multiplier, args.kppa)
+        tols = analyze_symmetry(structure, args.tol_max, args.tol_step, args.save_cif, pwd)
+        if len(args.q) > 0:
+            create_meshes(args.q, args.tol, pwd, structure,
+                          args.note, args.o, args.multiplier, args.kppa)
         with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
             json.dump(tols, f, ensure_ascii=False, indent=4)
             f.close()
@@ -307,10 +331,12 @@ if multiple:
             for _fname in os.listdir(tmp_path):
                 if 'output.opt' in _fname:
                     print(f'Found {_fname} in {os.path.basename(tmp_path)}, creating CONTCAR from here')
-                    get_contcar(os.path.join(tmp_path, _fname))
+                    get_contcar(os.path.join(tmp_path, _fname), args.o)
                     structure = IStructure.from_file(os.path.join(tmp_path, 'CONTCAR'))
-                    tols[fname] = analyze_symmetry(structure, args.tol_max, args.tol_step)
-                    create_meshes(args.q, args.tol, tmp_path, structure, args.note, args.o, args.multiplier, args.kppa)
+                    tols[fname] = analyze_symmetry(structure, args.tol_max, args.tol_step, args.save_cif, tmp_path)
+                    if len(args.q) > 0:
+                        create_meshes(args.q, args.tol, tmp_path, structure,
+                                      args.note, args.o, args.multiplier, args.kppa)
     with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
         json.dump(tols, f, ensure_ascii=False, indent=4)
         f.close()

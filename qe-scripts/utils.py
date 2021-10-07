@@ -81,12 +81,13 @@ def get_qe_struc(structure, tol, kppa):
     qe_struc['sg_str'] = str(sg)
 
     if sg < 142:
-        qe_struc['uniqueb'] = '\nuniqueb == .TRUE.,\n'
+        qe_struc['uniqueb'] = '\nuniqueb = .TRUE.,'
         refined = analyzer.get_refined_structure()
     else:
         qe_struc['uniqueb'] = ''
-        refined = analyzer.get_conventional_standard_structure()
-
+        refined = analyzer.get_primitive_standard_structure()
+    qe_struc['refined'] = refined
+    
     qe_struc['a'] = round(refined.lattice.a, 10)
     qe_struc['b'] = round(refined.lattice.b, 10)
     qe_struc['c'] = round(refined.lattice.c, 10)

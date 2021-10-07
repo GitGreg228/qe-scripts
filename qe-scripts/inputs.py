@@ -96,13 +96,13 @@ K_POINTS {automatic}
 
 def parse_system(path):
     default_system = {
-        "partition": "lenovo",
-        "modules": "module load intel/mkl-11.2.3 mpi/impi-2018.2.199\nexport PATH=~/qe-6.6/bin/:s$PATH",
+        "partition": "all",
+        "modules": "module load intel/2017u8\nexport PATH=~/qe-6.6/bin/:$PATH",
         "N_pw": 1,
-        "n_pw": 8,
-        "N_ph": 1,
-        "n_ph": 40,
-        "pp_path": "../../PP"
+        "n_pw": 36,
+        "N_ph": 2,
+        "n_ph": 72,
+        "pp_path": "../PP"
     }
 
     if os.path.isfile(os.path.join(path, 'system.json')):
@@ -126,7 +126,7 @@ def make_1(system, prefix, short, path, o):
 
 echo "OPT of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix} 
 
-$(which mpirun) $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
+srun $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
 
 echo "OPT of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
@@ -145,9 +145,8 @@ def make_2(system, prefix, short, path, o):
 
 {system['modules']}
 
-echo "SCF of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix} 
-
-$(which mpirun) $(which pw.x) -in $PWD/input.scf &> $PWD/output.scf.{prefix} 
+echo "SCF of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+srun $(which pw.x) -in $PWD/input.scf &> $PWD/output.scf.{prefix} 
 
 echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
@@ -191,7 +190,67 @@ def create_meshes(q, tol, path, structure, note, o, multiplier, kppa):
         for _q in mesh_lst:
             qpoints = qpoints + str(multiplier * int(_q)) + ' '
         kpoints = str()
-        _kpoints = Kpoints.automatic_density(structure, kppa=kppa).kpts[0]
+        refined = get_qe_struc(structure, tol, kppa)['refined']
+        _kpoints = Kpoints.automatic_density(refined, kppa=kppa).kpts[0]
         for i, _q in enumerate(mesh_lst):
             kpoints = kpoints + str(ceil(_kpoints[i]/int(_q))*int(_q)) + ' '
+        note = f'_{os.path.basename(path)}_{mesh}'.format()
         create_input_scf(tol, _tmp_path, structure, note, o, kpoints)
+
+
+def get_contcar(path, o):
+    idx_s = int()
+    idx_v = int()
+    idx_d = int()
+    idx_c = int()
+    idx_a = int()
+    idx_f = int()
+    with open(path, 'r') as f:
+        lines = f.readlines()
+        f.close()
+    for i, line in enumerate(lines):
+        if 'Begin final coordinates' in line:
+            idx_s = i
+        if 0 < idx_s < i and 'CELL_PARAMETERS' in line:
+            idx_c = i
+        if 0 < idx_s < i and 'new unit-cell volume' in line:
+            idx_v = i
+        if 0 < idx_s < i and 'g/cm^3' in line and 'density' in line:
+            idx_d = i
+        if 0 < idx_s < i and 'ATOMIC_POSITIONS' in line:
+            idx_a = i
+        if 0 < idx_s < i and 'End final coordinates' in line:
+            idx_f = i
+    if 'alat' in lines[idx_c]:
+        alat = lines[idx_c].split()[-1].replace(')', '')
+    else:
+        alat = '1'
+    volume = lines[idx_v].split()[-3] + ' ' + lines[idx_v].split()[-2]
+    density = lines[idx_d].split()[-2] + ' ' + lines[idx_d].split()[-1]
+    lattice = lines[idx_c+1:idx_a-1]
+    lattice_str = list()
+    for vec in lattice:
+        _vec = vec.split()
+        lattice_str.append('\t' + _vec[0] + '\t' + _vec[1] + '\t' + _vec[2])
+    lattice_str = "\n".join(lattice_str)
+    atom_pos = lines[idx_a+1:idx_f]
+    atoms_str = list()
+    species = list()
+    for a in atom_pos:
+        _a = a.split()
+        species.append(_a[0])
+        atoms_str.append('\t' + _a[1] + '\t' + _a[2] + '\t' + _a[3])
+    atoms_str = "\n".join(atoms_str)
+    sp_dict = {i: species.count(i) for i in species}
+    prefix = str()
+    species_str = ['', '']
+    for sp in sp_dict:
+        prefix = prefix + sp
+        species_str[0] = species_str[0] + '\t' + sp
+        species_str[1] = species_str[1] + '\t' + str(sp_dict[sp])
+        if sp_dict[sp] != 1:
+            prefix = prefix + str(sp_dict[sp])
+    prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}'
+    content = prefix_str + '\n' + alat + '\n' + lattice_str + \
+              '\n' + species_str[0] + '\n' + species_str[1] + '\nDirect\n' + atoms_str
+    overwrite(os.path.dirname(path), 'CONTCAR', content, o)

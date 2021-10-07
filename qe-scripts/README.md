@@ -56,4 +56,7 @@ You can choose range of tolerances in which the structure will be analyzed.
 python analyze.py --tol_step=%desired_tolerance_step% --tol_max=%desired_max_tolerance%
 ```
 Default `--tol_step` and `--tol_max` are 0.01 and 0.5 accordingly.
-You can disable creation of `.cif` files using
+You can disable creation of `.cif` files running `analyze.py` with tag:
+```bash
+python analyze.py --save_cif=False
+```

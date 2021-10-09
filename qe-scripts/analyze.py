@@ -15,7 +15,6 @@ parser.add_argument('--tol_max', type=float, default=0.5, help='Maximum allowed 
 parser.add_argument('--tol_step', type=float, default=0.01, help='Tolerance step during analysis (NOT CREATING FILES)')
 parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
 parser.add_argument('--q', nargs='+', default=[], help='Desired q-points meshes for phonon calculations')
-parser.add_argument('--multiplier', type=int, default=3, help='Multiplier to q-point mesh (to create k-point mesh)')
 parser.add_argument('--save_cif', type=boolean_string, default=True, help='create CIF file')
 args = parser.parse_args()
 
@@ -35,7 +34,7 @@ for fname in os.listdir(pwd):
         tols = analyze_symmetry(structure, args.tol_max, args.tol_step, args.save_cif, pwd)
         if len(args.q) > 0:
             create_meshes(args.q, args.tol, pwd, structure,
-                          args.note, args.o, args.multiplier, args.kppa)
+                          args.note, args.o, args.kppa)
         with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
             json.dump(tols, f, ensure_ascii=False, indent=4)
             f.close()
@@ -56,7 +55,7 @@ if multiple:
                     tols[fname] = analyze_symmetry(structure, args.tol_max, args.tol_step, args.save_cif, tmp_path)
                     if len(args.q) > 0:
                         create_meshes(args.q, args.tol, tmp_path, structure,
-                                      args.note, args.o, args.multiplier, args.kppa)
+                                      args.note, args.o, args.kppa)
     with open(os.path.join(pwd, 'symm.json'), 'w', encoding='utf-8') as f:
         json.dump(tols, f, ensure_ascii=False, indent=4)
         f.close()

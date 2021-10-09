@@ -154,7 +154,7 @@ def create_input_scf(tol, path, qe_struc, note, o, kpoints, prefix, short, shift
     make_2(system, prefix, short, path, o)
 
 
-def create_meshes(q, tol, path, structure, note, o, multiplier, kppa):
+def create_meshes(q, tol, path, structure, note, o, kppa):
     for mesh in q:
         _tmp_path = os.path.join(path, mesh)
         if not os.path.isdir(_tmp_path):
@@ -165,9 +165,6 @@ def create_meshes(q, tol, path, structure, note, o, multiplier, kppa):
             if each.isnumeric():
                 mesh_lst.append(each)
         assert len(mesh_lst) == 3
-        qpoints = str()
-        for _q in mesh_lst:
-            qpoints = qpoints + str(multiplier * int(_q)) + ' '
         kpoints = str()
         refined = get_qe_struc(structure, tol, kppa)['refined']
         _kpoints = Kpoints.automatic_density(refined, kppa=kppa).kpts[0]

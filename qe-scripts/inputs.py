@@ -1,6 +1,7 @@
-import json
 from math import ceil
 from utils import *
+
+from systems import parse_system
 
 
 def write_opt(qe_struc, pressure, dyn, path, o):
@@ -94,26 +95,6 @@ K_POINTS {automatic}
     overwrite(path, 'input.scf', input_scf, o)
 
 
-def parse_system(path):
-    default_system = {
-        "partition": "all",
-        "modules": "module load intel/2017u8\nexport PATH=~/qe-6.6/bin/:$PATH",
-        "N_pw": 1,
-        "n_pw": 36,
-        "N_ph": 2,
-        "n_ph": 72,
-        "pp_path": "../PP"
-    }
-
-    if os.path.isfile(os.path.join(path, 'system.json')):
-        with open(os.path.join(path, 'system.json'), 'r') as json_file:
-            system = json.load(json_file)
-            json_file.close()
-    else:
-        system = default_system
-    return system
-
-
 def make_1(system, prefix, short, path, o):
     script1 = f"""#!/bin/sh
 #SBATCH -o qe.out1 -e qe.err1
@@ -126,7 +107,7 @@ def make_1(system, prefix, short, path, o):
 
 echo "OPT of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix} 
 
-srun $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
+{system['mpirun']} $(which pw.x) -in $PWD/input.opt &> $PWD/output.opt.{prefix} 
 
 echo "OPT of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
@@ -146,7 +127,8 @@ def make_2(system, prefix, short, path, o):
 {system['modules']}
 
 echo "SCF of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
-srun $(which pw.x) -in $PWD/input.scf &> $PWD/output.scf.{prefix} 
+
+{system['mpirun']} $(which pw.x) -in $PWD/input.scf &> $PWD/output.scf.{prefix} 
 
 echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
@@ -165,13 +147,10 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     make_1(system, prefix, short, path, o)
 
 
-def create_input_scf(tol, path, structure, note, o, kpoints, shift='0 0 0'):
-    qe_struc = get_qe_struc(structure, tol, kppa=1)
+def create_input_scf(tol, path, qe_struc, note, o, kpoints, prefix, short, shift='0 0 0'):
     write_scf(qe_struc, kpoints, shift, path, o)
     system = parse_system(path)
     copy_pp(system, path)
-    prefix = formulas(structure)[0]
-    short = formulas(structure)[1] + f'{note}'.format()
     make_2(system, prefix, short, path, o)
 
 
@@ -195,7 +174,10 @@ def create_meshes(q, tol, path, structure, note, o, multiplier, kppa):
         for i, _q in enumerate(mesh_lst):
             kpoints = kpoints + str(ceil(_kpoints[i]/int(_q))*int(_q)) + ' '
         note = f'_{os.path.basename(path)}_{mesh}'.format()
-        create_input_scf(tol, _tmp_path, structure, note, o, kpoints)
+        qe_struc = get_qe_struc(structure, tol, kppa=1)
+        prefix = formulas(structure)[0]
+        short = formulas(structure)[1] + f'{note}'.format()
+        create_input_scf(tol, _tmp_path, qe_struc, note, o, kpoints, prefix, short)
 
 
 def get_contcar(path, o):
@@ -211,15 +193,16 @@ def get_contcar(path, o):
     for i, line in enumerate(lines):
         if 'Begin final coordinates' in line:
             idx_s = i
-        if 0 < idx_s < i and 'CELL_PARAMETERS' in line:
+    for i, line in enumerate(lines, start=idx_s):
+        if 'CELL_PARAMETERS' in line:
             idx_c = i
-        if 0 < idx_s < i and 'new unit-cell volume' in line:
+        if 'new unit-cell volume' in line:
             idx_v = i
-        if 0 < idx_s < i and 'g/cm^3' in line and 'density' in line:
+        if 'g/cm^3' in line and 'density' in line:
             idx_d = i
-        if 0 < idx_s < i and 'ATOMIC_POSITIONS' in line:
+        if 'ATOMIC_POSITIONS' in line:
             idx_a = i
-        if 0 < idx_s < i and 'End final coordinates' in line:
+        if 'End final coordinates' in line:
             idx_f = i
     if 'alat' in lines[idx_c]:
         alat = lines[idx_c].split()[-1].replace(')', '')

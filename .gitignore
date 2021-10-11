@@ -18,6 +18,7 @@ desktop.ini
 *log*
 *.scf
 *.cif
+ph*.in
 
 # C extensions
 *.so

@@ -56,6 +56,15 @@ def formulas(structure):
     return prefix, short
 
 
+def get_masses(structure):
+    masses = str()
+    species = list(set(structure.species))
+    for i in range(len(species)):
+        mass = str(species[i].atomic_mass).replace(' amu', '')
+        masses = masses + f'amass({i})={mass},\n  '.format()
+    return masses
+
+
 def analyze_symmetry(structure, tol_max, tol_step, save_cif, path):
     prev_number = 0
     tols = dict()
@@ -136,3 +145,14 @@ def copy_pp(system, path):
                 tmp_src = os.path.join(system['pp_path'], fname)
                 if os.path.isfile(tmp_src):
                     shutil.copy2(tmp_src, path)
+
+
+def parse_mesh(mesh):
+    mesh_lst = list()
+    res = re.split('(\d+)', mesh)
+    for each in res:
+        if each.isnumeric():
+            _q = int(each)
+            mesh_lst.append(_q)
+    assert len(mesh_lst) == 3
+    return mesh_lst

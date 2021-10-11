@@ -95,6 +95,29 @@ K_POINTS {automatic}
     overwrite(path, 'input.scf', input_scf, o)
 
 
+def write_ph_in(formula, masses, mesh_lst, q, path, o):
+    ph_in = f"""Electron-phonon coefficients for ${formula}
+ &inputph
+  tr2_ph=1.0d-8,
+  prefix='{formula}',
+  outdir = '.',
+  fildvscf='dv',
+  fildyn = '{formula}.dyn',
+  {masses}fildrho = 'drho',
+  ldisp = .true.,
+  lshift_q = .true.,
+  start_q={q},
+  last_q={q},
+  nq1 = {mesh_lst[0]}, 
+  nq2 = {mesh_lst[1]},
+  nq3 = {mesh_lst[2]},
+/
+""".format()
+
+    name = f'ph{q}.in'.format()
+    overwrite(path, name, ph_in, o)
+
+
 def make_1(system, prefix, short, path, o):
     script1 = f"""#!/bin/sh
 #SBATCH -o qe.out1 -e qe.err1
@@ -137,6 +160,33 @@ echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix}
     overwrite(path, 'script2.sh', script2, o)
 
 
+def make_3(system, prefix, short, q, len_qpoints, path, o):
+    if q < len_qpoints:
+        _next = f'3{str(q + 1)}'.format()
+    else:
+        _next = '4'
+    script3 = f"""#!/bin/sh
+#SBATCH -o qe.out3 -e qe.err3
+#SBATCH -p {system['partition']}
+#SBATCH -J p{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
+
+{system['modules']}
+
+echo "PH{q} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/ph{q}.in &> $PWD/output.ph{q}.{prefix} 
+
+echo "PH{q} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+sbatch script{_next}.sh
+""".format()
+
+    name = f'script3{q}.sh'.format()
+    overwrite(path, name, script3, o)
+
+
 def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     qe_struc = get_qe_struc(structure, tol, kppa)
     write_opt(qe_struc, pressure, dyn, path, o)
@@ -147,11 +197,23 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     make_1(system, prefix, short, path, o)
 
 
-def create_input_scf(tol, path, qe_struc, note, o, kpoints, prefix, short, shift='0 0 0'):
+def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='0 0 0'):
     write_scf(qe_struc, kpoints, shift, path, o)
     system = parse_system(path)
     copy_pp(system, path)
     make_2(system, prefix, short, path, o)
+
+
+def create_ph_ins(path, mesh, mesh_lst, structure, tol, prefix, short, o):
+    analyzer = SpacegroupAnalyzer(structure, symprec=tol)
+    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(0.5, 0.5, 0.5))
+    masses = get_masses(structure)
+    len_qpoints = len(qpoints)
+    system = parse_system(path)
+    print(f'For mesh {mesh} got {len(qpoints)} q-points in IBZ.')
+    for q in range(len_qpoints):
+        write_ph_in(prefix, masses, mesh_lst, q, path, o)
+        make_3(system, prefix, short, q, len_qpoints, path, o)
 
 
 def create_meshes(q, tol, path, structure, note, o, kppa):
@@ -159,22 +221,21 @@ def create_meshes(q, tol, path, structure, note, o, kppa):
         _tmp_path = os.path.join(path, mesh)
         if not os.path.isdir(_tmp_path):
             os.mkdir(_tmp_path)
-        res = re.split('(\d+)', mesh)
-        mesh_lst = list()
-        for each in res:
-            if each.isnumeric():
-                mesh_lst.append(each)
-        assert len(mesh_lst) == 3
         kpoints = str()
         refined = get_qe_struc(structure, tol, kppa)['refined']
         _kpoints = Kpoints.automatic_density(refined, kppa=kppa).kpts[0]
+        mesh_lst = parse_mesh(mesh)
         for i, _q in enumerate(mesh_lst):
-            kpoints = kpoints + str(ceil(_kpoints[i]/int(_q))*int(_q)) + ' '
-        note = f'_{os.path.basename(path)}_{mesh}'.format()
+            kpoints = kpoints + str(ceil(_kpoints[i]/_q)*_q) + ' '
+        if note:
+            note = f'_{os.path.basename(path)}_{mesh}_{note}'.format()
+        else:
+            note = f'_{os.path.basename(path)}_{mesh}'.format()
         qe_struc = get_qe_struc(structure, tol, kppa=1)
         prefix = formulas(structure)[0]
         short = formulas(structure)[1] + f'{note}'.format()
-        create_input_scf(tol, _tmp_path, qe_struc, note, o, kpoints, prefix, short)
+        create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
+        create_ph_ins(_tmp_path, mesh, mesh_lst, structure, tol, prefix, short, o)
 
 
 def get_contcar(path, o):
@@ -190,16 +251,16 @@ def get_contcar(path, o):
     for i, line in enumerate(lines):
         if 'Begin final coordinates' in line:
             idx_s = i
-    for i, line in enumerate(lines, start=idx_s):
-        if 'CELL_PARAMETERS' in line:
+    for i in range(idx_s, len(lines)):
+        if 'CELL_PARAMETERS' in lines[i]:
             idx_c = i
-        if 'new unit-cell volume' in line:
+        if 'new unit-cell volume' in lines[i]:
             idx_v = i
-        if 'g/cm^3' in line and 'density' in line:
+        if 'g/cm^3' in lines[i] and 'density' in lines[i]:
             idx_d = i
-        if 'ATOMIC_POSITIONS' in line:
+        if 'ATOMIC_POSITIONS' in lines[i]:
             idx_a = i
-        if 'End final coordinates' in line:
+        if 'End final coordinates' in lines[i]:
             idx_f = i
     if 'alat' in lines[idx_c]:
         alat = lines[idx_c].split()[-1].replace(')', '')

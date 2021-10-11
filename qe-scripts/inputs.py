@@ -96,7 +96,7 @@ K_POINTS {automatic}
 
 
 def write_ph_in(formula, masses, mesh_lst, q, path, o):
-    ph_in = f"""Electron-phonon coefficients for ${formula}
+    ph_in = f"""Electron-phonon coefficients for {formula}
  &inputph
   tr2_ph=1.0d-8,
   prefix='{formula}',
@@ -106,8 +106,8 @@ def write_ph_in(formula, masses, mesh_lst, q, path, o):
   {masses}fildrho = 'drho',
   ldisp = .true.,
   lshift_q = .true.,
-  start_q={q},
-  last_q={q},
+  start_q={q + 1},
+  last_q={q + 1},
   nq1 = {mesh_lst[0]}, 
   nq2 = {mesh_lst[1]},
   nq3 = {mesh_lst[2]},
@@ -161,29 +161,29 @@ echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix}
 
 
 def make_3(system, prefix, short, q, len_qpoints, path, o):
-    if q < len_qpoints:
-        _next = f'3{str(q + 1)}'.format()
+    if q < len_qpoints - 1:
+        _next = f'3{str(q + 2)}'.format()
     else:
         _next = '4'
     script3 = f"""#!/bin/sh
 #SBATCH -o qe.out3 -e qe.err3
 #SBATCH -p {system['partition']}
-#SBATCH -J p{short}
+#SBATCH -J {q + 1}p{short}
 #SBATCH -N {system['N_ph']}
 #SBATCH -n {system['n_ph']}
 
 {system['modules']}
 
-echo "PH{q} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+echo "PH{q + 1} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
 
-{system['mpirun']} $(which ph.x) -in $PWD/ph{q}.in &> $PWD/output.ph{q}.{prefix} 
+{system['mpirun']} $(which ph.x) -in $PWD/ph{q + 1}.in &> $PWD/output.ph{q + 1}.{prefix} 
 
-echo "PH{q} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+echo "PH{q + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
 sbatch script{_next}.sh
 """.format()
 
-    name = f'script3{q}.sh'.format()
+    name = f'script3{q + 1}.sh'.format()
     overwrite(path, name, script3, o)
 
 

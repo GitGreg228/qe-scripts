@@ -61,7 +61,7 @@ def get_masses(structure):
     species = list(set(structure.species))
     for i in range(len(species)):
         mass = str(species[i].atomic_mass).replace(' amu', '')
-        masses = masses + f'amass({i})={mass},\n  '.format()
+        masses = masses + f'amass({i+1})={mass},\n  '.format()
     return masses
 
 

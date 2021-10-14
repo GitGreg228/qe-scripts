@@ -3,8 +3,20 @@ from pymatgen.io.cif import CifWriter
 from pymatgen.io.vasp.inputs import Kpoints
 import numpy as np
 import shutil
+import json
 import os
 import re
+
+
+def parse_mesh(mesh):
+    mesh_lst = list()
+    res = re.split('(\d+)', mesh)
+    for each in res:
+        if each.isnumeric():
+            _q = int(each)
+            mesh_lst.append(_q)
+    assert len(mesh_lst) == 3
+    return mesh_lst
 
 
 def boolean_string(s):
@@ -87,14 +99,16 @@ def get_qe_struc(structure, tol, kppa):
     qe_struc['prefix'] = formulas(structure)[0]
     analyzer = SpacegroupAnalyzer(structure, symprec=tol)
     sg = analyzer.get_space_group_number()
+    qe_struc['sg'] = sg
     qe_struc['sg_str'] = str(sg)
+    qe_struc['sym'] = f'{analyzer.get_space_group_symbol()} ({str(sg)})'.format()
 
     if sg < 142:
         qe_struc['uniqueb'] = '\nuniqueb = .TRUE.,'
         refined = analyzer.get_refined_structure()
     else:
         qe_struc['uniqueb'] = ''
-        refined = analyzer.get_primitive_standard_structure()
+        refined = analyzer.get_conventional_standard_structure()
     qe_struc['refined'] = refined
     
     qe_struc['a'] = round(refined.lattice.a, 10)
@@ -131,7 +145,7 @@ def get_qe_struc(structure, tol, kppa):
         coords.append(atom + "\t" + "{:.10f}".format(x) + "\t" + "{:.10f}".format(y) + "\t" + "{:.10f}".format(z))
     qe_struc['positions'] = "\n".join(coords)
 
-    _kpoints = Kpoints.automatic_density(refined, kppa=kppa)
+    _kpoints = Kpoints.automatic_density_by_vol(refined, kppvol=kppa)
 
     qe_struc['kpoints'] = arr_str(_kpoints.kpts[0])
     qe_struc['shift'] = arr_str(_kpoints.kpts_shift)
@@ -147,12 +161,103 @@ def copy_pp(system, path):
                     shutil.copy2(tmp_src, path)
 
 
-def parse_mesh(mesh):
-    mesh_lst = list()
-    res = re.split('(\d+)', mesh)
-    for each in res:
-        if each.isnumeric():
-            _q = int(each)
-            mesh_lst.append(_q)
-    assert len(mesh_lst) == 3
-    return mesh_lst
+def get_contcar(path, o):
+    idx = dict()
+    idx['s'] = int()
+    with open(path, 'r') as f:
+        lines = f.readlines()
+        f.close()
+    for i, line in enumerate(lines):
+        if 'Begin final coordinates' in line:
+            idx['s'] = i
+    for i in range(idx['s'], len(lines)):
+        if 'CELL_PARAMETERS' in lines[i]:
+            idx['c'] = i
+        if 'new unit-cell volume' in lines[i]:
+            idx['v'] = i
+        if 'g/cm^3' in lines[i] and 'density' in lines[i]:
+            idx['d'] = i
+        if 'ATOMIC_POSITIONS' in lines[i]:
+            idx['a'] = i
+        if 'End final coordinates' in lines[i]:
+            idx['f'] = i
+        if '!    total energy' in lines[i]:
+            idx['t'] = i
+    if idx['s'] == 0:
+        message = f'Warning! No final coordinates found in {path}! Creating CONTCAR from last relaxation step.'.format()
+        print(message)
+    struc_summ = dict()
+    k_Ry_eV = 13.605698066  # 1 Ry = 13.605698066 eV
+    nat = idx['f'] - idx['a'] - 1
+    vol_A = round(float(lines[idx['v']].split()[-3]), 3)
+    E_Ry = round(float(lines[idx['t']].split()[-2]), 3)
+    struc_summ['volume'] = [f'{str(vol_A)} Ang^3'.format(),
+                            f'{str(round(vol_A / nat, 3))} Ang^3 per atom'.format()]
+    struc_summ['density'] = str(round(float(lines[idx['d']].split()[-2]), 3)) + ' ' + lines[idx['d']].split()[-1]
+    struc_summ['energy'] = [f'{str(E_Ry)} Ry',
+                            f'{str(round(E_Ry / nat, 3))} Ry per atom',
+                            f'{str(round(E_Ry * k_Ry_eV, 3))} eV',
+                            f'{str(round(E_Ry * k_Ry_eV / nat, 3))} eV per atom']
+    # Getting lattice constant
+    if 'alat' in lines[idx['c']]:
+        alat = lines[idx['c']].split()[-1].replace(')', '')
+    else:
+        alat = '1'
+    # Getting lattice vectors
+    lattice = lines[idx['c']+1:idx['a']-1]
+    lattice_str = list()
+    for vec in lattice:
+        _vec = vec.split()
+        lattice_str.append('\t'.join(['', *_vec]))
+    lattice_str = '\n'.join(lattice_str)
+    # Getting atoms positions
+    atom_pos = lines[idx['a'] + 1:idx['f']]
+    atoms_str = list()
+    species = list()
+    for a in atom_pos:
+        _a = a.split()
+        species.append(_a[0])
+        atoms_str.append('\t'.join(['', *_a[1:]]))
+    atoms_str = '\n'.join(atoms_str)
+    # Getting species string
+    species_names = list()
+    species_numbers = list()
+    sp_dict = {i: species.count(i) for i in species}
+    prefix = str()
+    for sp in sp_dict:
+        prefix = prefix + sp
+        species_names.append(sp)
+        species_numbers.append(str(sp_dict[sp]))
+        if sp_dict[sp] != 1:
+            prefix = prefix + str(sp_dict[sp])
+    volume = ' '.join(struc_summ['volume'])
+    density = struc_summ['density']
+    energy = ' '.join(struc_summ['energy'])
+    prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}, E = {energy}'
+
+    contcar = [prefix_str, alat, lattice_str,
+               '\t'.join(['', *species_names]), '\t'.join(['', *species_numbers]),
+               'Direct', atoms_str]
+    content = '\n'.join(contcar)
+
+    overwrite(os.path.dirname(path), 'CONTCAR', content, o)
+
+    return struc_summ
+
+
+def write_json(path, dictionary, name):
+    with open(os.path.join(path, name), 'w', encoding='utf-8') as f:
+        json.dump(dictionary, f, ensure_ascii=False, sort_keys=True, indent=4)
+
+
+def print_output(summary):
+    message = list()
+    for key in summary['symmetry']:
+        sym = summary['symmetry'][key]
+        message.append(f'{sym} for {key} tolerance')
+    message = ', '.join(message)
+    print(f'Relaxed structure has the following symmetry: {message}.'.format())
+    e = summary['energy'][-3]
+    v = summary['volume'][-1]
+    d = summary['density']
+    print(f'E = {e}, V = {v}, rho = {d}\n'.format())

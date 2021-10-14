@@ -114,7 +114,7 @@ def write_ph_in(formula, masses, mesh_lst, q, path, o):
 /
 """.format()
 
-    name = f'ph{q}.in'.format()
+    name = f'ph{q + 1}.in'.format()
     overwrite(path, name, ph_in, o)
 
 
@@ -210,23 +210,33 @@ def create_ph_ins(path, mesh, mesh_lst, structure, tol, prefix, short, o):
     masses = get_masses(structure)
     len_qpoints = len(qpoints)
     system = parse_system(path)
-    print(f'For mesh {mesh} got {len(qpoints)} q-points in IBZ.')
     for q in range(len_qpoints):
         write_ph_in(prefix, masses, mesh_lst, q, path, o)
         make_3(system, prefix, short, q, len_qpoints, path, o)
+    qpoints_dict = dict()
+    for qpoint in qpoints:
+        xyz = np.round(qpoint[0], 3).tolist()
+        qpoints_dict['  '.join(["%.3f" % k for k in xyz])] = qpoint[1].item()
+    return qpoints_dict
 
 
 def create_meshes(q, tol, path, structure, note, o, kppa):
+    mesh_dict = dict()
     for mesh in q:
         _tmp_path = os.path.join(path, mesh)
         if not os.path.isdir(_tmp_path):
             os.mkdir(_tmp_path)
-        kpoints = str()
+        kpoints = list()
         refined = get_qe_struc(structure, tol, kppa)['refined']
-        _kpoints = Kpoints.automatic_density(refined, kppa=kppa).kpts[0]
+        _kpoints = Kpoints.automatic_density_by_vol(refined, kppvol=kppa).kpts[0]
         mesh_lst = parse_mesh(mesh)
+        k_total = 1
+        q_total = 1
         for i, _q in enumerate(mesh_lst):
-            kpoints = kpoints + str(ceil(_kpoints[i]/_q)*_q) + ' '
+            kpoints.append(str(ceil(_kpoints[i]/_q)*_q))
+            k_total = k_total * _kpoints[i]
+            q_total = q_total * _q
+        kpoints = ' '.join(kpoints)
         if note:
             note = f'_{os.path.basename(path)}_{mesh}_{note}'.format()
         else:
@@ -235,63 +245,15 @@ def create_meshes(q, tol, path, structure, note, o, kppa):
         prefix = formulas(structure)[0]
         short = formulas(structure)[1] + f'{note}'.format()
         create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
-        create_ph_ins(_tmp_path, mesh, mesh_lst, structure, tol, prefix, short, o)
+        mesh_dict[mesh] = dict()
+        mesh_dict[mesh]['space_group'] = qe_struc['sym']
+        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure, tol, prefix, short, o)
+        mesh_dict[mesh]['kpoints_scf'] = kpoints
+        mesh_dict[mesh]['vol_Ang^3'] = round(structure.volume, 3)
+        mesh_dict[mesh]['vol_reciprocal_Ang^(-3)'] = k_total / kppa
+        mesh_dict[mesh]['kppvol'] = kppa
+        mesh_dict[mesh]['qppa'] = round(kppa * q_total / k_total)
+        mesh_dict[mesh]['qppu'] = q_total
+        mesh_dict[mesh]['qppuirr'] = len(mesh_dict[mesh]['xyz'])
 
-
-def get_contcar(path, o):
-    idx_s = int()
-    idx_v = int()
-    idx_d = int()
-    idx_c = int()
-    idx_a = int()
-    idx_f = int()
-    with open(path, 'r') as f:
-        lines = f.readlines()
-        f.close()
-    for i, line in enumerate(lines):
-        if 'Begin final coordinates' in line:
-            idx_s = i
-    for i in range(idx_s, len(lines)):
-        if 'CELL_PARAMETERS' in lines[i]:
-            idx_c = i
-        if 'new unit-cell volume' in lines[i]:
-            idx_v = i
-        if 'g/cm^3' in lines[i] and 'density' in lines[i]:
-            idx_d = i
-        if 'ATOMIC_POSITIONS' in lines[i]:
-            idx_a = i
-        if 'End final coordinates' in lines[i]:
-            idx_f = i
-    if 'alat' in lines[idx_c]:
-        alat = lines[idx_c].split()[-1].replace(')', '')
-    else:
-        alat = '1'
-    volume = lines[idx_v].split()[-3] + ' ' + lines[idx_v].split()[-2]
-    density = lines[idx_d].split()[-2] + ' ' + lines[idx_d].split()[-1]
-    lattice = lines[idx_c+1:idx_a-1]
-    lattice_str = list()
-    for vec in lattice:
-        _vec = vec.split()
-        lattice_str.append('\t' + _vec[0] + '\t' + _vec[1] + '\t' + _vec[2])
-    lattice_str = "\n".join(lattice_str)
-    atom_pos = lines[idx_a+1:idx_f]
-    atoms_str = list()
-    species = list()
-    for a in atom_pos:
-        _a = a.split()
-        species.append(_a[0])
-        atoms_str.append('\t' + _a[1] + '\t' + _a[2] + '\t' + _a[3])
-    atoms_str = "\n".join(atoms_str)
-    sp_dict = {i: species.count(i) for i in species}
-    prefix = str()
-    species_str = ['', '']
-    for sp in sp_dict:
-        prefix = prefix + sp
-        species_str[0] = species_str[0] + '\t' + sp
-        species_str[1] = species_str[1] + '\t' + str(sp_dict[sp])
-        if sp_dict[sp] != 1:
-            prefix = prefix + str(sp_dict[sp])
-    prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}'
-    content = prefix_str + '\n' + alat + '\n' + lattice_str + \
-              '\n' + species_str[0] + '\n' + species_str[1] + '\nDirect\n' + atoms_str
-    overwrite(os.path.dirname(path), 'CONTCAR', content, o)
+    return mesh_dict

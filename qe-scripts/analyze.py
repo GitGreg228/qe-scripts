@@ -58,7 +58,7 @@ if multiple:
                                                        args.note, args.o, args.kppa)
     if len(args.q) > 0:
         write_json(pwd, qpoints, 'qpoints.json')
-    write_json(pwd, summary, 'summary.json')
+    write_json(pwd, reverse_summary(summary), 'summary.json')
 
 print('Parameters of relaxed structure(s) are saved in summary.json')
 if len(args.q) > 0:

@@ -261,3 +261,15 @@ def print_output(summary):
     v = summary['volume'][-1]
     d = summary['density']
     print(f'E = {e}, V = {v}, rho = {d}\n'.format())
+
+
+def reverse_summary(summary):
+    reversed_summary = dict()
+    for key in summary:
+        for _key in summary[key]:
+            reversed_summary[_key] = dict()
+    for key in summary:
+        for _key in summary[key]:
+            reversed_summary[_key][key] = summary[key][_key]
+    return reversed_summary
+

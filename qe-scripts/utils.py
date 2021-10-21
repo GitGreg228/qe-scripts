@@ -108,7 +108,7 @@ def get_qe_struc(structure, tol, kppa):
         refined = analyzer.get_refined_structure()
     else:
         qe_struc['uniqueb'] = ''
-        refined = analyzer.get_conventional_standard_structure()
+        refined = analyzer.get_primitive_standard_structure()
     qe_struc['refined'] = refined
     
     qe_struc['a'] = round(refined.lattice.a, 10)

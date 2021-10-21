@@ -118,6 +118,34 @@ def write_ph_in(formula, masses, mesh_lst, q, path, o):
     overwrite(path, name, ph_in, o)
 
 
+def write_elph_in(masses, mesh_lst, len_qpoints, kpoints, prefix, path, o):
+    elph_in = f""" Electron-phonon for {prefix}
+&INPUTPH
+tr2_ph=1.0d-8,
+prefix = '{prefix}',
+outdir = '.',
+fildvscf = 'dv',
+fildyn = '{prefix}.dyn'
+{masses}fildrho = 'drho',
+ldisp = .true.,
+lshift_q = .true.,
+start_q=1,
+last_q={len_qpoints},
+nq1 = {mesh_lst[0]}, 
+nq2 = {mesh_lst[1]},
+nq3 = {mesh_lst[2]},
+electron_phonon = "lambda_tetra"
+nk1 = {kpoints.split()[0]},
+nk2 = {kpoints.split()[1]},
+nk3 = {kpoints.split()[2]},
+/
+&INPUTa2F
+nfreq = 10000
+/""".format()
+    
+    overwrite(path, 'elph.in', elph_in, o)
+
+
 def make_1(system, prefix, short, path, o):
     script1 = f"""#!/bin/sh
 #SBATCH -o qe.out1 -e qe.err1
@@ -155,6 +183,7 @@ echo "SCF of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
 
 echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
+sbatch script31.sh
 """.format()
 
     overwrite(path, 'script2.sh', script2, o)
@@ -187,6 +216,27 @@ sbatch script{_next}.sh
     overwrite(path, name, script3, o)
 
 
+def make_4(system, prefix, short, path, o):
+    script4 = f"""#!/bin/sh
+#SBATCH -o qe.out4 -e qe.err4
+#SBATCH -p {system['partition']}
+#SBATCH -J e{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
+
+{system['modules']}
+
+echo "ELPH of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/elph.in &> $PWD/output.elph.{prefix} 
+
+echo "ELPH of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+""".format()
+
+    overwrite(path, 'script4.sh', script4, o)
+
+
 def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     qe_struc = get_qe_struc(structure, tol, kppa)
     write_opt(qe_struc, pressure, dyn, path, o)
@@ -204,7 +254,7 @@ def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='0 0 0'):
     make_2(system, prefix, short, path, o)
 
 
-def create_ph_ins(path, mesh, mesh_lst, structure, tol, prefix, short, o):
+def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o):
     analyzer = SpacegroupAnalyzer(structure, symprec=tol)
     qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(0.5, 0.5, 0.5))
     masses = get_masses(structure)
@@ -217,6 +267,8 @@ def create_ph_ins(path, mesh, mesh_lst, structure, tol, prefix, short, o):
     for qpoint in qpoints:
         xyz = np.round(qpoint[0], 3).tolist()
         qpoints_dict['  '.join(["%.3f" % k for k in xyz])] = qpoint[1].item()
+    make_4(system, prefix, short, path, o)
+    write_elph_in( masses, mesh_lst, len_qpoints, kpoints, prefix, path, o)
     return qpoints_dict
 
 
@@ -247,7 +299,7 @@ def create_meshes(q, tol, path, structure, note, o, kppa):
         create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
         mesh_dict[mesh] = dict()
         mesh_dict[mesh]['space_group'] = qe_struc['sym']
-        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure, tol, prefix, short, o)
+        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o)
         mesh_dict[mesh]['kpoints_scf'] = kpoints
         mesh_dict[mesh]['vol_Ang^3'] = round(structure.volume, 3)
         mesh_dict[mesh]['vol_reciprocal_Ang^(-3)'] = k_total / kppa

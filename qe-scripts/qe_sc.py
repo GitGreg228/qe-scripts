@@ -14,7 +14,7 @@ parser.add_argument('--poscar', type=str, default='POSCAR', help='POSCAR file na
 parser.add_argument('--note', type=str, default='', help='note to add into script')
 parser.add_argument('--o', type=boolean_string, default=True, help='Overwrite all files')
 parser.add_argument('--press', nargs='+', default=[2000], help='Pressure(s) in kBar')
-parser.add_argument('--kppa', type=int, default=50000, help='K-points per unit volume')
+parser.add_argument('--kppa', type=int, default=300, help='K-points per unit volume')
 parser.add_argument('--primitive', default=True, type=boolean_string, help='if print primitive structure')
 parser.add_argument('--dyn', type=str, default='all', help='cell dynamics')
 args = parser.parse_args()

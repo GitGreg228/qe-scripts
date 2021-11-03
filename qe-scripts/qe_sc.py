@@ -53,5 +53,5 @@ elif len(args.press) > 1:
             os.mkdir(tmp_path)
         note = '_' + p + '_' + args.note
         pressure = arr_str(p)
-        create_input_opt(args.tol, tmp_path, structure, note, args.o, pressure, args.kppa, args.dyn)
+        create_input_opt(args.tol, tmp_path, structure, note, args.o, pressure, args.kppa, args.dyn, args.primitive)
 

@@ -94,7 +94,7 @@ def analyze_symmetry(structure, tol_max, tol_step, save_cif, path):
     return tols
 
 
-def get_qe_struc(structure, tol, kppa):
+def get_qe_struc(structure, tol, kppa, primitive=True):
     qe_struc = dict()
     qe_struc['prefix'] = formulas(structure)[0]
     analyzer = SpacegroupAnalyzer(structure, symprec=tol)
@@ -118,10 +118,17 @@ def get_qe_struc(structure, tol, kppa):
     qe_struc['cosAC'] = round(np.cos(refined.lattice.beta * np.pi / 180), 10)
     qe_struc['cosAB'] = round(np.cos(refined.lattice.gamma * np.pi / 180), 10)
 
-    ref_analyzer = SpacegroupAnalyzer(refined, symprec=tol)
-    symm_struc = ref_analyzer.get_symmetrized_structure()
+    if primitive:
+        ref_analyzer = SpacegroupAnalyzer(refined, symprec=tol)
+        symm_struc = ref_analyzer.get_symmetrized_structure()
+        qe_struc['nat'] = str(len(symm_struc.equivalent_sites))
+        sites = symm_struc.equivalent_sites
+    else:
+        ref_analyzer = analyzer
+        symm_struc = structure
+        qe_struc['nat'] = str(len(symm_struc.sites))
+        sites = symm_struc.sites
 
-    qe_struc['nat'] = str(len(symm_struc.equivalent_sites))
     qe_struc['ntyp'] = str(len(set(structure.species)))
 
     species = list()
@@ -135,13 +142,16 @@ def get_qe_struc(structure, tol, kppa):
 
     coords = list()
 
-    eq_sites = symm_struc.equivalent_sites
-    for site in eq_sites:
-        specie = str(site[0].species)
+    for site in sites:
+        if primitive:
+            specie = str(site[0].species)
+        else:
+            specie = str(site.species)
         atom = ''.join([i for i in specie if not i.isdigit()])
-        x = site[0].frac_coords[0]
-        y = site[0].frac_coords[1]
-        z = site[0].frac_coords[2]
+        if primitive:
+            x, y, z = site[0].frac_coords
+        else:
+            x, y, z = site.frac_coords
         coords.append(atom + "\t" + "{:.10f}".format(x) + "\t" + "{:.10f}".format(y) + "\t" + "{:.10f}".format(z))
     qe_struc['positions'] = "\n".join(coords)
 

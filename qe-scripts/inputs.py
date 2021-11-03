@@ -237,8 +237,8 @@ echo "ELPH of {prefix} STOPPED at" $(date) | tee -a log.{prefix}
     overwrite(path, 'script4.sh', script4, o)
 
 
-def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
-    qe_struc = get_qe_struc(structure, tol, kppa)
+def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn, primitive=True):
+    qe_struc = get_qe_struc(structure, tol, kppa, primitive=primitive)
     write_opt(qe_struc, pressure, dyn, path, o)
     system = parse_system(path)
     copy_pp(system, path)
@@ -247,7 +247,7 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn):
     make_1(system, prefix, short, path, o)
 
 
-def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='0 0 0'):
+def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='1 1 1'):
     write_scf(qe_struc, kpoints, shift, path, o)
     system = parse_system(path)
     copy_pp(system, path)
@@ -272,7 +272,7 @@ def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, 
     return qpoints_dict
 
 
-def create_meshes(q, tol, path, structure, note, o, kppa):
+def create_meshes(q, tol, path, structure, note, o, kppa, multiplier):
     mesh_dict = dict()
     for mesh in q:
         _tmp_path = os.path.join(path, mesh)
@@ -285,7 +285,7 @@ def create_meshes(q, tol, path, structure, note, o, kppa):
         k_total = 1
         q_total = 1
         for i, _q in enumerate(mesh_lst):
-            kpoints.append(str(ceil(_kpoints[i]/_q)*_q))
+            kpoints.append(multiplier * _q)
             k_total = k_total * _kpoints[i]
             q_total = q_total * _q
         kpoints = ' '.join(kpoints)

@@ -14,7 +14,7 @@ parser.add_argument('--tol_step', type=float, default=0.01, help='Tolerance step
 parser.add_argument('--kppa', type=int, default=2000, help='Grid density per Angstrom^(-3)')
 parser.add_argument('--q', nargs='+', default=[], help='Desired q-points meshes for phonon calculations')
 parser.add_argument('--save_cif', type=boolean_string, default=True, help='create CIF file')
-parser.add_argument('--multiplier', type=int, default=4, help='k = q * multiplier')
+parser.add_argument('--mul', type=int, default=4, help='k = q * multiplier')
 args = parser.parse_args()
 
 if args.path == '.':
@@ -35,7 +35,7 @@ for fname in os.listdir(pwd):
         print_output(summary)
         if len(args.q) > 0:
             qpoints = create_meshes(args.q, args.tol, pwd, structure,
-                                    args.note, args.o, args.kppa, args.multiplier)
+                                    args.note, args.o, args.kppa, args.mul)
             write_json(pwd, qpoints, 'qpoints.json')
         write_json(pwd, summary, 'summary.json')
         multiple = False
@@ -56,7 +56,7 @@ if multiple:
                     print_output(summary[fname])
                     if len(args.q) > 0:
                         qpoints[fname] = create_meshes(args.q, args.tol, tmp_path, structure,
-                                                       args.note, args.o, args.kppa)
+                                                       args.note, args.o, args.kppa, args.mul)
     if len(args.q) > 0:
         write_json(pwd, qpoints, 'qpoints.json')
     write_json(pwd, reverse_summary(summary), 'summary.json')

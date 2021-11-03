@@ -285,7 +285,7 @@ def create_meshes(q, tol, path, structure, note, o, kppa, multiplier):
         k_total = 1
         q_total = 1
         for i, _q in enumerate(mesh_lst):
-            kpoints.append(multiplier * _q)
+            kpoints.append(str(multiplier * _q))
             k_total = k_total * _kpoints[i]
             q_total = q_total * _q
         kpoints = ' '.join(kpoints)

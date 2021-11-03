@@ -19,6 +19,7 @@ desktop.ini
 *.scf
 *.cif
 ph*.in
+elph.in
 
 # C extensions
 *.so

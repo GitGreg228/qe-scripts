@@ -13,6 +13,7 @@ parser.add_argument('--tol_max', type=float, default=0.5, help='Maximum allowed 
 parser.add_argument('--tol_step', type=float, default=0.01, help='Tolerance step during analysis (NOT CREATING FILES)')
 parser.add_argument('--kppa', type=int, default=2000, help='Grid density per Angstrom^(-3)')
 parser.add_argument('--q', nargs='+', default=[], help='Desired q-points meshes for phonon calculations')
+parser.add_argument('--q_num', type=int, default=False, help='Desired q-points meshes for phonon calculations')
 parser.add_argument('--save_cif', type=boolean_string, default=True, help='create CIF file')
 parser.add_argument('--mul', type=int, default=4, help='k = q * multiplier')
 args = parser.parse_args()
@@ -35,7 +36,7 @@ for fname in os.listdir(pwd):
         print_output(summary)
         if len(args.q) > 0:
             qpoints = create_meshes(args.q, args.tol, pwd, structure,
-                                    args.note, args.o, args.kppa, args.mul)
+                                    args.note, args.o, args.kppa, args.mul, q_num=args.q_num)
             write_json(pwd, qpoints, 'qpoints.json')
         write_json(pwd, summary, 'summary.json')
         multiple = False
@@ -52,11 +53,12 @@ if multiple:
                     print(f'Found {_fname} in {os.path.basename(tmp_path)}, creating CONTCAR from here...')
                     summary[fname] = get_contcar(os.path.join(tmp_path, _fname), args.o)
                     structure = IStructure.from_file(os.path.join(tmp_path, 'CONTCAR'))
-                    summary[fname]['symmetry'] = analyze_symmetry(structure, args.tol_max, args.tol_step, args.save_cif, tmp_path)
+                    summary[fname]['symmetry'] = analyze_symmetry(structure, args.tol_max,
+                                                                  args.tol_step, args.save_cif, tmp_path)
                     print_output(summary[fname])
                     if len(args.q) > 0:
                         qpoints[fname] = create_meshes(args.q, args.tol, tmp_path, structure,
-                                                       args.note, args.o, args.kppa, args.mul)
+                                                       args.note, args.o, args.kppa, args.mul, q_num=args.q_num)
     if len(args.q) > 0:
         write_json(pwd, qpoints, 'qpoints.json')
     write_json(pwd, reverse_summary(summary), 'summary.json')

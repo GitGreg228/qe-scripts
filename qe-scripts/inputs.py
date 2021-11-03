@@ -254,11 +254,14 @@ def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='1 1 1'):
     make_2(system, prefix, short, path, o)
 
 
-def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o):
+def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o, q_num=False):
     analyzer = SpacegroupAnalyzer(structure, symprec=tol)
-    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(0.5, 0.5, 0.5))
+    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(1, 1, 1))
     masses = get_masses(structure)
-    len_qpoints = len(qpoints)
+    if q_num:
+        len_qpoints = q_num
+    else:
+        len_qpoints = len(qpoints)
     system = parse_system(path)
     for q in range(len_qpoints):
         write_ph_in(prefix, masses, mesh_lst, q, path, o)
@@ -272,7 +275,7 @@ def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, 
     return qpoints_dict
 
 
-def create_meshes(q, tol, path, structure, note, o, kppa, multiplier):
+def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, q_num=False):
     mesh_dict = dict()
     for mesh in q:
         _tmp_path = os.path.join(path, mesh)
@@ -299,7 +302,8 @@ def create_meshes(q, tol, path, structure, note, o, kppa, multiplier):
         create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
         mesh_dict[mesh] = dict()
         mesh_dict[mesh]['space_group'] = qe_struc['sym']
-        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o)
+        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure,
+                                               kpoints, tol, prefix, short, o, q_num)
         mesh_dict[mesh]['kpoints_scf'] = kpoints
         mesh_dict[mesh]['vol_Ang^3'] = round(structure.volume, 3)
         mesh_dict[mesh]['vol_reciprocal_Ang^(-3)'] = k_total / kppa

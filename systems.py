@@ -25,10 +25,21 @@ def parse_system(path):
         "mpirun": "srun"
     }
 
+    default_system_3 = {
+        "partition": "cpu",
+        "modules": "module load compilers/intel-2020\nexport PATH=~/programs/qe-7.0/bin/:$PATH",
+        "N_pw": 1,
+        "n_pw": 24,
+        "N_ph": 2,
+        "n_ph": 48,
+        "pp_path": "../PP",
+        "mpirun": "$(which mpirun)"
+    }
+
     if os.path.isfile(os.path.join(path, 'system.json')):
         with open(os.path.join(path, 'system.json'), 'r') as json_file:
             system = json.load(json_file)
             json_file.close()
     else:
-        system = default_system_1
+        system = default_system_3
     return system

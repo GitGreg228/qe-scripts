@@ -1,11 +1,15 @@
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from pymatgen.io.cif import CifWriter
-from pymatgen.io.vasp.inputs import Kpoints
 import numpy as np
 import shutil
 import json
 import os
 import re
+
+
+from systems import parse_system
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from pymatgen.io.cif import CifWriter
+from pymatgen.io.vasp.inputs import Kpoints
+from inputs import *
 
 
 def parse_mesh(mesh):
@@ -23,18 +27,6 @@ def boolean_string(s):
     if s not in {'False', 'True'}:
         raise ValueError('Not a valid boolean string')
     return s == 'True'
-
-
-def overwrite(path, name, content, o):
-    tmp_path = os.path.join(path, name)
-    if not os.path.isfile(tmp_path):
-        with open(tmp_path, 'w') as f:
-            f.write(content)
-            f.close()
-    elif o:
-        with open(tmp_path, 'w') as f:
-            f.write(content)
-            f.close()
 
 
 def arr_str(s):
@@ -282,4 +274,86 @@ def reverse_summary(summary):
         for _key in summary[key]:
             reversed_summary[_key][key] = summary[key][_key]
     return reversed_summary
+
+
+def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn, primitive=True):
+    qe_struc = get_qe_struc(structure, tol, kppa, primitive=primitive)
+    write_opt(qe_struc, pressure, dyn, path, o)
+    system = parse_system(path)
+    copy_pp(system, path)
+    prefix = formulas(structure)[0]
+    short = formulas(structure)[1] + f'{note}'.format()
+    make_1(system, prefix, short, path, o)
+
+
+def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='1 1 1'):
+    write_scf(qe_struc, kpoints, shift, path, o)
+    system = parse_system(path)
+    copy_pp(system, path)
+    make_2(system, prefix, short, path, o)
+
+
+def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o, sub, q_num=False):
+    analyzer = SpacegroupAnalyzer(structure, symprec=tol)
+    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(1, 1, 1))
+    masses = get_masses(structure)
+    if q_num:
+        len_qpoints = q_num
+    else:
+        len_qpoints = len(qpoints)
+    system = parse_system(path)
+    if sub:
+        for q in range(len_qpoints):
+            write_ph_in(prefix, masses, mesh_lst, q, q, path, o)
+            make_3(system, prefix, short, q, q, len_qpoints, path, o)
+    else:
+        write_ph_in(prefix, masses, mesh_lst, 0, len_qpoints-1, path, o)
+        make_3(system, prefix, short, 0, len_qpoints-1, len_qpoints, path, o)
+    qpoints_dict = dict()
+    for qpoint in qpoints:
+        xyz = np.round(qpoint[0], 3).tolist()
+        qpoints_dict['  '.join(["%.3f" % k for k in xyz])] = qpoint[1].item()
+    make_4(system, prefix, short, path, o)
+    write_elph_in( masses, mesh_lst, len_qpoints, kpoints, prefix, path, o)
+    return qpoints_dict
+
+
+def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, sub, q_num=False):
+    mesh_dict = dict()
+    for mesh in q:
+        _tmp_path = os.path.join(path, mesh)
+        if not os.path.isdir(_tmp_path):
+            os.mkdir(_tmp_path)
+        kpoints = list()
+        refined = get_qe_struc(structure, tol, kppa)['refined']
+        _kpoints = Kpoints.automatic_density_by_vol(refined, kppvol=kppa).kpts[0]
+        mesh_lst = parse_mesh(mesh)
+        k_total = 1
+        q_total = 1
+        for i, _q in enumerate(mesh_lst):
+            kpoints.append(str(multiplier * _q))
+            k_total = k_total * _kpoints[i]
+            q_total = q_total * _q
+        kpoints = ' '.join(kpoints)
+        if note:
+            note = f'_{os.path.basename(path)}_{mesh}_{note}'.format()
+        else:
+            note = f'_{os.path.basename(path)}_{mesh}'.format()
+        qe_struc = get_qe_struc(structure, tol, kppa=1)
+        prefix = formulas(structure)[0]
+        short = formulas(structure)[1] + f'{note}'.format()
+        create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
+        mesh_dict[mesh] = dict()
+        mesh_dict[mesh]['space_group'] = qe_struc['sym']
+        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure,
+                                               kpoints, tol, prefix, short, o, sub, q_num)
+        mesh_dict[mesh]['kpoints_scf'] = kpoints
+        mesh_dict[mesh]['vol_Ang^3'] = round(structure.volume, 3)
+        mesh_dict[mesh]['vol_reciprocal_Ang^(-3)'] = k_total / kppa
+        mesh_dict[mesh]['kppvol'] = kppa
+        mesh_dict[mesh]['qppa'] = round(kppa * q_total / k_total)
+        mesh_dict[mesh]['qppu'] = q_total
+        mesh_dict[mesh]['qppuirr'] = len(mesh_dict[mesh]['xyz'])
+
+    return mesh_dict
 

@@ -1,7 +1,16 @@
-from math import ceil
-from utils import *
+import os
 
-from systems import parse_system
+
+def overwrite(path, name, content, o):
+    tmp_path = os.path.join(path, name)
+    if not os.path.isfile(tmp_path):
+        with open(tmp_path, 'w') as f:
+            f.write(content)
+            f.close()
+    elif o:
+        with open(tmp_path, 'w') as f:
+            f.write(content)
+            f.close()
 
 
 def write_opt(qe_struc, pressure, dyn, path, o):
@@ -95,7 +104,7 @@ K_POINTS {automatic}
     overwrite(path, 'input.scf', input_scf, o)
 
 
-def write_ph_in(formula, masses, mesh_lst, q, path, o):
+def write_ph_in(formula, masses, mesh_lst, q_s, q_f, path, o):
     ph_in = f"""Electron-phonon coefficients for {formula}
  &inputph
   tr2_ph=1.0d-8,
@@ -106,15 +115,17 @@ def write_ph_in(formula, masses, mesh_lst, q, path, o):
   {masses}fildrho = 'drho',
   ldisp = .true.,
   lshift_q = .true.,
-  start_q={q + 1},
-  last_q={q + 1},
+  start_q={q_s + 1},
+  last_q={q_f + 1},
   nq1 = {mesh_lst[0]}, 
   nq2 = {mesh_lst[1]},
   nq3 = {mesh_lst[2]},
 /
 """.format()
-
-    name = f'ph{q + 1}.in'.format()
+    if q_s == q_f:
+        name = f'ph{q_s + 1}.in'.format()
+    else:
+        name = f'ph{q_s + 1}to{q_f + 1}.in'.format()
     overwrite(path, name, ph_in, o)
 
 
@@ -189,30 +200,49 @@ sbatch script31.sh
     overwrite(path, 'script2.sh', script2, o)
 
 
-def make_3(system, prefix, short, q, len_qpoints, path, o):
-    if q < len_qpoints - 1:
-        _next = f'3{str(q + 2)}'.format()
+def make_3(system, prefix, short, q_s, q_f, len_qpoints, path, o):
+    if q_f < len_qpoints - 1:
+        _next = f'3{str(q_f + 2)}'.format()
     else:
         _next = '4'
-    script3 = f"""#!/bin/sh
+    if q_s == q_f:
+        script3 = f"""#!/bin/sh
 #SBATCH -o qe.out3 -e qe.err3
 #SBATCH -p {system['partition']}
-#SBATCH -J {q + 1}p{short}
+#SBATCH -J {q_s + 1}p{short}
 #SBATCH -N {system['N_ph']}
 #SBATCH -n {system['n_ph']}
 
 {system['modules']}
 
-echo "PH{q + 1} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+echo "PH{q_s + 1} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
 
-{system['mpirun']} $(which ph.x) -in $PWD/ph{q + 1}.in &> $PWD/output.ph{q + 1}.{prefix} 
+{system['mpirun']} $(which ph.x) -in $PWD/ph{q_s + 1}.in &> $PWD/output.ph{q_s + 1}.{prefix} 
 
-echo "PH{q + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+echo "PH{q_s + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+sbatch script{_next}.sh
+""".format()
+    else:
+        script3 = f"""#!/bin/sh
+#SBATCH -o qe.out3 -e qe.err3
+#SBATCH -p {system['partition']}
+#SBATCH -J {q_s + 1}_{q_f + 1}p{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
+
+{system['modules']}
+
+echo "PH{q_s + 1} to PH{q_f + 1} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/ph{q_s + 1}to{q_f + 1}.in &> $PWD/output.ph{q_s + 1}to{q_f + 1}.{prefix} 
+
+echo "PH{q_s + 1} to PH{q_f + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
 sbatch script{_next}.sh
 """.format()
 
-    name = f'script3{q + 1}.sh'.format()
+    name = f'script3{q_s + 1}.sh'.format()
     overwrite(path, name, script3, o)
 
 
@@ -236,80 +266,3 @@ echo "ELPH of {prefix} STOPPED at" $(date) | tee -a log.{prefix}
 
     overwrite(path, 'script4.sh', script4, o)
 
-
-def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn, primitive=True):
-    qe_struc = get_qe_struc(structure, tol, kppa, primitive=primitive)
-    write_opt(qe_struc, pressure, dyn, path, o)
-    system = parse_system(path)
-    copy_pp(system, path)
-    prefix = formulas(structure)[0]
-    short = formulas(structure)[1] + f'{note}'.format()
-    make_1(system, prefix, short, path, o)
-
-
-def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='1 1 1'):
-    write_scf(qe_struc, kpoints, shift, path, o)
-    system = parse_system(path)
-    copy_pp(system, path)
-    make_2(system, prefix, short, path, o)
-
-
-def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o, q_num=False):
-    analyzer = SpacegroupAnalyzer(structure, symprec=tol)
-    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(1, 1, 1))
-    masses = get_masses(structure)
-    if q_num:
-        len_qpoints = q_num
-    else:
-        len_qpoints = len(qpoints)
-    system = parse_system(path)
-    for q in range(len_qpoints):
-        write_ph_in(prefix, masses, mesh_lst, q, path, o)
-        make_3(system, prefix, short, q, len_qpoints, path, o)
-    qpoints_dict = dict()
-    for qpoint in qpoints:
-        xyz = np.round(qpoint[0], 3).tolist()
-        qpoints_dict['  '.join(["%.3f" % k for k in xyz])] = qpoint[1].item()
-    make_4(system, prefix, short, path, o)
-    write_elph_in( masses, mesh_lst, len_qpoints, kpoints, prefix, path, o)
-    return qpoints_dict
-
-
-def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, q_num=False):
-    mesh_dict = dict()
-    for mesh in q:
-        _tmp_path = os.path.join(path, mesh)
-        if not os.path.isdir(_tmp_path):
-            os.mkdir(_tmp_path)
-        kpoints = list()
-        refined = get_qe_struc(structure, tol, kppa)['refined']
-        _kpoints = Kpoints.automatic_density_by_vol(refined, kppvol=kppa).kpts[0]
-        mesh_lst = parse_mesh(mesh)
-        k_total = 1
-        q_total = 1
-        for i, _q in enumerate(mesh_lst):
-            kpoints.append(str(multiplier * _q))
-            k_total = k_total * _kpoints[i]
-            q_total = q_total * _q
-        kpoints = ' '.join(kpoints)
-        if note:
-            note = f'_{os.path.basename(path)}_{mesh}_{note}'.format()
-        else:
-            note = f'_{os.path.basename(path)}_{mesh}'.format()
-        qe_struc = get_qe_struc(structure, tol, kppa=1)
-        prefix = formulas(structure)[0]
-        short = formulas(structure)[1] + f'{note}'.format()
-        create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
-        mesh_dict[mesh] = dict()
-        mesh_dict[mesh]['space_group'] = qe_struc['sym']
-        mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure,
-                                               kpoints, tol, prefix, short, o, q_num)
-        mesh_dict[mesh]['kpoints_scf'] = kpoints
-        mesh_dict[mesh]['vol_Ang^3'] = round(structure.volume, 3)
-        mesh_dict[mesh]['vol_reciprocal_Ang^(-3)'] = k_total / kppa
-        mesh_dict[mesh]['kppvol'] = kppa
-        mesh_dict[mesh]['qppa'] = round(kppa * q_total / k_total)
-        mesh_dict[mesh]['qppu'] = q_total
-        mesh_dict[mesh]['qppuirr'] = len(mesh_dict[mesh]['xyz'])
-
-    return mesh_dict

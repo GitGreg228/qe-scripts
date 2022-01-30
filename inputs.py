@@ -80,6 +80,7 @@ def write_scf(qe_struc, kpoints, shift, path, o):
     outdir='.',
  /
 &system
+    nosym=.TRUE.,
     ibrav= 0, 
     celldm(1) = 0, 
     nat={qe_struc['nat']},

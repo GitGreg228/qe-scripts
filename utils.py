@@ -86,40 +86,55 @@ def analyze_symmetry(structure, tol_max, tol_step, save_cif, path):
     return tols
 
 
-def get_qe_struc(structure, tol, kppa, primitive=True):
+def get_qe_struc(structure, tol, kppa, primitive=True, nosym=False):
     qe_struc = dict()
     qe_struc['prefix'] = formulas(structure)[0]
-    analyzer = SpacegroupAnalyzer(structure, symprec=tol)
-    sg = analyzer.get_space_group_number()
-    qe_struc['sg'] = sg
-    qe_struc['sg_str'] = str(sg)
-    qe_struc['sym'] = f'{analyzer.get_space_group_symbol()} ({str(sg)})'.format()
-
-    if sg < 142:
-        qe_struc['uniqueb'] = '\nuniqueb = .TRUE.,'
-        refined = analyzer.get_refined_structure()
+    if nosym:
+        qe_struc['sg'] = 1
+        qe_struc['sg_str'] = '1'
+        qe_struc['sym'] = 'P1'
     else:
-        qe_struc['uniqueb'] = ''
-        refined = analyzer.get_primitive_standard_structure()
+        analyzer = SpacegroupAnalyzer(structure, symprec=tol)
+        sg = analyzer.get_space_group_number()
+        qe_struc['sg'] = sg
+        qe_struc['sg_str'] = str(sg)
+        qe_struc['sym'] = f'{analyzer.get_space_group_symbol()} ({str(sg)})'.format()
+
+    if nosym:
+        refined = structure
+    else:
+        if sg < 142:
+            qe_struc['uniqueb'] = '\nuniqueb = .TRUE.,'
+            refined = analyzer.get_refined_structure()
+        else:
+            qe_struc['uniqueb'] = ''
+            refined = analyzer.get_primitive_standard_structure()
+
+        qe_struc['a'] = round(refined.lattice.a, 10)
+        qe_struc['b'] = round(refined.lattice.b, 10)
+        qe_struc['c'] = round(refined.lattice.c, 10)
+        qe_struc['cosBC'] = round(np.cos(refined.lattice.alpha * np.pi / 180), 10)
+        qe_struc['cosAC'] = round(np.cos(refined.lattice.beta * np.pi / 180), 10)
+        qe_struc['cosAB'] = round(np.cos(refined.lattice.gamma * np.pi / 180), 10)
     qe_struc['refined'] = refined
-    
-    qe_struc['a'] = round(refined.lattice.a, 10)
-    qe_struc['b'] = round(refined.lattice.b, 10)
-    qe_struc['c'] = round(refined.lattice.c, 10)
-    qe_struc['cosBC'] = round(np.cos(refined.lattice.alpha * np.pi / 180), 10)
-    qe_struc['cosAC'] = round(np.cos(refined.lattice.beta * np.pi / 180), 10)
-    qe_struc['cosAB'] = round(np.cos(refined.lattice.gamma * np.pi / 180), 10)
-
-    if primitive:
-        ref_analyzer = SpacegroupAnalyzer(refined, symprec=tol)
-        symm_struc = ref_analyzer.get_symmetrized_structure()
-        qe_struc['nat'] = str(len(symm_struc.equivalent_sites))
-        sites = symm_struc.equivalent_sites
+    lattice = str()
+    for vector in refined.lattice.matrix:
+        lattice = lattice + '\t'.join([str(c) for c in vector.tolist()]) + '\n'
+    qe_struc['lattice'] = lattice
+    if nosym:
+        sites = structure.sites
+        qe_struc['nat'] = str(len(structure.sites))
     else:
-        ref_analyzer = analyzer
-        symm_struc = structure
-        qe_struc['nat'] = str(len(symm_struc.sites))
-        sites = symm_struc.sites
+        if primitive:
+            ref_analyzer = SpacegroupAnalyzer(refined, symprec=tol)
+            symm_struc = ref_analyzer.get_symmetrized_structure()
+            qe_struc['nat'] = str(len(symm_struc.equivalent_sites))
+            sites = symm_struc.equivalent_sites
+        else:
+            ref_analyzer = analyzer
+            symm_struc = structure
+            qe_struc['nat'] = str(len(symm_struc.sites))
+            sites = symm_struc.sites
 
     qe_struc['ntyp'] = str(len(set(structure.species)))
 
@@ -135,15 +150,21 @@ def get_qe_struc(structure, tol, kppa, primitive=True):
     coords = list()
 
     for site in sites:
-        if primitive:
-            specie = str(site[0].species)
-        else:
+        if nosym:
             specie = str(site.species)
-        atom = ''.join([i for i in specie if not i.isdigit()])
-        if primitive:
-            x, y, z = site[0].frac_coords
         else:
+            if primitive:
+                specie = str(site[0].species)
+            else:
+                specie = str(site.species)
+        atom = ''.join([i for i in specie if not i.isdigit()])
+        if nosym:
             x, y, z = site.frac_coords
+        else:
+            if primitive:
+                x, y, z = site[0].frac_coords
+            else:
+                x, y, z = site.frac_coords
         coords.append(atom + "\t" + "{:.10f}".format(x) + "\t" + "{:.10f}".format(y) + "\t" + "{:.10f}".format(z))
     qe_struc['positions'] = "\n".join(coords)
 
@@ -318,14 +339,17 @@ def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, 
     return qpoints_dict
 
 
-def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, sub, q_num=False):
+def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, sub, nosym, q_num=False):
     mesh_dict = dict()
     for mesh in q:
-        _tmp_path = os.path.join(path, mesh)
+        if nosym:
+            _tmp_path = os.path.join(path, mesh + '_nosym')
+        else:
+            _tmp_path = os.path.join(path, mesh)
         if not os.path.isdir(_tmp_path):
             os.mkdir(_tmp_path)
         kpoints = list()
-        refined = get_qe_struc(structure, tol, kppa)['refined']
+        refined = get_qe_struc(structure, tol, kppa, nosym=nosym)['refined']
         _kpoints = Kpoints.automatic_density_by_vol(refined, kppvol=kppa).kpts[0]
         mesh_lst = parse_mesh(mesh)
         k_total = 1
@@ -339,14 +363,21 @@ def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, sub, q_num
             note = f'_{os.path.basename(path)}_{mesh}_{note}'.format()
         else:
             note = f'_{os.path.basename(path)}_{mesh}'.format()
-        qe_struc = get_qe_struc(structure, tol, kppa=1)
+        qe_struc = get_qe_struc(structure, tol, nosym=nosym, kppa=1)
         prefix = formulas(structure)[0]
         short = formulas(structure)[1] + f'{note}'.format()
         create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
         mesh_dict[mesh] = dict()
         mesh_dict[mesh]['space_group'] = qe_struc['sym']
+        if nosym:
+            if mesh == '2x2x2':
+                q_num = 4
+            elif mesh == '3x3x3':
+                q_num = 14
+            elif mesh == '4x4x4':
+                q_num = 32
         mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure,
-                                               kpoints, tol, prefix, short, o, sub, q_num)
+                                                kpoints, tol, prefix, short, o, sub, q_num)
         mesh_dict[mesh]['kpoints_scf'] = kpoints
         mesh_dict[mesh]['vol_Ang^3'] = round(structure.volume, 3)
         mesh_dict[mesh]['vol_reciprocal_Ang^(-3)'] = k_total / kppa

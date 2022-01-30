@@ -72,8 +72,33 @@ def write_scf(qe_struc, kpoints, shift, path, o):
     Writing input.scf
     """
     automatic = '{automatic}'
-
-    input_scf = f"""&control
+    if qe_struc['sg_str'] == '1':
+        input_scf = f"""&control
+    calculation='scf'
+    prefix='{qe_struc['prefix']}',
+    pseudo_dir = '.', 
+    outdir='.',
+ /
+&system
+    ibrav= 0, 
+    celldm(1) = 0, 
+    nat={qe_struc['nat']},
+    ntyp={qe_struc['ntyp']},
+    ecutwfc=80.0,
+    occupations = 'tetrahedra_opt',
+ /
+ &electrons
+ /
+ATOMIC_SPECIES
+{qe_struc['species']}
+ATOMIC_POSITIONS (crystal)
+{qe_struc['positions']}
+K_POINTS {automatic}
+ {kpoints}  {shift}
+CELL_PARAMETERS (angstrom)
+{qe_struc['lattice']}""".format(automatic=automatic)
+    else:
+        input_scf = f"""&control
     calculation='scf'
     prefix='{qe_struc['prefix']}',
     pseudo_dir = '.', 

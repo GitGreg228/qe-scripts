@@ -131,7 +131,8 @@ K_POINTS {automatic}
 
 
 def write_ph_in(formula, masses, mesh_lst, q_s, q_f, path, o):
-    ph_in = f"""Electron-phonon coefficients for {formula}
+    if q_f:
+        ph_in = f"""Electron-phonon coefficients for {formula}
  &inputph
   tr2_ph=1.0d-8,
   prefix='{formula}',
@@ -148,10 +149,29 @@ def write_ph_in(formula, masses, mesh_lst, q_s, q_f, path, o):
   nq3 = {mesh_lst[2]},
 /
 """.format()
+    else:
+        ph_in = f"""Electron-phonon coefficients for {formula}
+ &inputph
+  tr2_ph=1.0d-8,
+  prefix='{formula}',
+  outdir = '.',
+  fildvscf='dv',
+  fildyn = '{formula}.dyn',
+  {masses}fildrho = 'drho',
+  ldisp = .true.,
+  lshift_q = .true.,
+  nq1 = {mesh_lst[0]}, 
+  nq2 = {mesh_lst[1]},
+  nq3 = {mesh_lst[2]},
+/
+""".format()
     if q_s == q_f:
         name = f'ph{q_s + 1}.in'.format()
     else:
-        name = f'ph{q_s + 1}to{q_f + 1}.in'.format()
+        if q_f:
+            name = f'ph{q_s + 1}to{q_f + 1}.in'.format()
+        else:
+            name = f'ph.in'.format()
     overwrite(path, name, ph_in, o)
 
 
@@ -166,8 +186,6 @@ fildyn = '{prefix}.dyn'
 {masses}fildrho = 'drho',
 ldisp = .true.,
 lshift_q = .true.,
-start_q=1,
-last_q={len_qpoints},
 nq1 = {mesh_lst[0]}, 
 nq2 = {mesh_lst[1]},
 nq3 = {mesh_lst[2]},
@@ -227,12 +245,13 @@ sbatch script31.sh
 
 
 def make_3(system, prefix, short, q_s, q_f, len_qpoints, path, o):
-    if q_f < len_qpoints - 1:
-        _next = f'3{str(q_f + 2)}'.format()
-    else:
-        _next = '4'
-    if q_s == q_f:
-        script3 = f"""#!/bin/sh
+    if q_f:
+        if q_f < len_qpoints - 1:
+            _next = f'3{str(q_f + 2)}'.format()
+        else:
+            _next = '4'
+        if q_s == q_f:
+            script3 = f"""#!/bin/sh
 #SBATCH -o qe.out3 -e qe.err3
 #SBATCH -p {system['partition']}
 #SBATCH -J {q_s + 1}p{short}
@@ -249,8 +268,8 @@ echo "PH{q_s + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix}
 
 sbatch script{_next}.sh
 """.format()
-    else:
-        script3 = f"""#!/bin/sh
+        else:
+            script3 = f"""#!/bin/sh
 #SBATCH -o qe.out3 -e qe.err3
 #SBATCH -p {system['partition']}
 #SBATCH -J {q_s + 1}_{q_f + 1}p{short}
@@ -267,7 +286,24 @@ echo "PH{q_s + 1} to PH{q_f + 1} of {prefix} STOPPED at" $(date) | tee -a log.{p
 
 sbatch script{_next}.sh
 """.format()
+    else:
+        script3 = f"""#!/bin/sh
+#SBATCH -o qe.out3 -e qe.err3
+#SBATCH -p {system['partition']}
+#SBATCH -J p{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
 
+{system['modules']}
+
+echo "PH of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/ph.in &> $PWD/output.ph.{prefix} 
+
+echo "PH of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+sbatch script4.sh
+""".format()
     name = f'script3{q_s + 1}.sh'.format()
     overwrite(path, name, script3, o)
 

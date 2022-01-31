@@ -38,7 +38,7 @@ for fname in os.listdir(pwd):
         print_output(summary)
         if len(args.q) > 0:
             qpoints = create_meshes(args.q, args.tol, pwd, structure,
-                                    args.note, args.o, args.kppa, args.mul, args.subs, args.nosym, q_num=args.q_num)
+                                    args.note, args.o, args.kppa, args.mul, args.subs, args.nosym,  q_num=args.q_num)
             write_json(pwd, qpoints, 'qpoints.json')
         write_json(pwd, summary, 'summary.json')
         multiple = False

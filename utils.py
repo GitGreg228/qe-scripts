@@ -328,8 +328,8 @@ def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, 
             write_ph_in(prefix, masses, mesh_lst, q, q, path, o)
             make_3(system, prefix, short, q, q, len_qpoints, path, o)
     else:
-        write_ph_in(prefix, masses, mesh_lst, 0, len_qpoints-1, path, o)
-        make_3(system, prefix, short, 0, len_qpoints-1, len_qpoints, path, o)
+        write_ph_in(prefix, masses, mesh_lst, 0, None, path, o)
+        make_3(system, prefix, short, 0, None, len_qpoints, path, o)
     qpoints_dict = dict()
     for qpoint in qpoints:
         xyz = np.round(qpoint[0], 3).tolist()

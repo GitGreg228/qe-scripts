@@ -307,7 +307,7 @@ def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn, primiti
     make_1(system, prefix, short, path, o)
 
 
-def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='1 1 1'):
+def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='0 0 0'):
     write_scf(qe_struc, kpoints, shift, path, o)
     system = parse_system(path)
     copy_pp(system, path)
@@ -316,7 +316,7 @@ def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='1 1 1'):
 
 def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o, sub, q_num=False):
     analyzer = SpacegroupAnalyzer(structure, symprec=tol)
-    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(1, 1, 1))
+    qpoints = analyzer.get_ir_reciprocal_mesh(tuple(mesh_lst), is_shift=(0, 0, 0))
     masses = get_masses(structure)
     if q_num:
         len_qpoints = q_num

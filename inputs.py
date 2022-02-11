@@ -131,7 +131,7 @@ K_POINTS {automatic}
 
 
 def write_ph_in(formula, masses, mesh_lst, q_s, q_f, path, o):
-    if q_f:
+    if isinstance(q_f, int):
         ph_in = f"""Electron-phonon coefficients for {formula}
  &inputph
   tr2_ph=1.0d-8,
@@ -175,8 +175,33 @@ def write_ph_in(formula, masses, mesh_lst, q_s, q_f, path, o):
     overwrite(path, name, ph_in, o)
 
 
-def write_elph_in(masses, mesh_lst, len_qpoints, kpoints, prefix, path, o):
-    elph_in = f""" Electron-phonon for {prefix}
+def write_elph_in(prefix, masses, mesh_lst, q_s, q_f, kpoints, path, o):
+    if isinstance(q_f, int):
+        elph_in = f""" Electron-phonon for {prefix}
+&INPUTPH
+tr2_ph=1.0d-8,
+prefix = '{prefix}',
+outdir = '.',
+fildvscf = 'dv',
+fildyn = '{prefix}.dyn'
+{masses}fildrho = 'drho',
+ldisp = .true.,
+lshift_q = .true.,
+start_q={q_s + 1},
+last_q={q_f + 1},
+nq1 = {mesh_lst[0]}, 
+nq2 = {mesh_lst[1]},
+nq3 = {mesh_lst[2]},
+electron_phonon = "lambda_tetra"
+nk1 = {kpoints.split()[0]},
+nk2 = {kpoints.split()[1]},
+nk3 = {kpoints.split()[2]},
+/
+&INPUTa2F
+nfreq = 10000
+/""".format()
+    else:
+        elph_in = f""" Electron-phonon for {prefix}
 &INPUTPH
 tr2_ph=1.0d-8,
 prefix = '{prefix}',
@@ -197,8 +222,14 @@ nk3 = {kpoints.split()[2]},
 &INPUTa2F
 nfreq = 10000
 /""".format()
-    
-    overwrite(path, 'elph.in', elph_in, o)
+    if q_s == q_f:
+        name = f'elph{q_s + 1}.in'.format()
+    else:
+        if q_f:
+            name = f'elph{q_s + 1}to{q_f + 1}.in'.format()
+        else:
+            name = f'elph.in'.format()
+    overwrite(path, name, elph_in, o)
 
 
 def make_1(system, prefix, short, path, o):
@@ -245,11 +276,11 @@ sbatch script31.sh
 
 
 def make_3(system, prefix, short, q_s, q_f, len_qpoints, path, o):
-    if q_f:
+    if isinstance(q_f, int):
         if q_f < len_qpoints - 1:
             _next = f'3{str(q_f + 2)}'.format()
         else:
-            _next = '4'
+            _next = '41'
         if q_s == q_f:
             script3 = f"""#!/bin/sh
 #SBATCH -o qe.out3 -e qe.err3
@@ -302,14 +333,56 @@ echo "PH of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
 
 echo "PH of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
-sbatch script4.sh
+sbatch script41.sh
 """.format()
     name = f'script3{q_s + 1}.sh'.format()
     overwrite(path, name, script3, o)
 
 
-def make_4(system, prefix, short, path, o):
-    script4 = f"""#!/bin/sh
+def make_4(system, prefix, short, q_s, q_f, len_qpoints, path, o):
+    if isinstance(q_f, int):
+        if q_f < len_qpoints - 1:
+            _next = f'4{str(q_f + 2)}'.format()
+        else:
+            _next = '4'
+        if q_s == q_f:
+            script4 = f"""#!/bin/sh
+#SBATCH -o qe.out4 -e qe.err4
+#SBATCH -p {system['partition']}
+#SBATCH -J {q_s + 1}e{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
+
+{system['modules']}
+
+echo "ELPH{q_s + 1} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/elph{q_s + 1}.in &> $PWD/output.elph{q_s + 1}.{prefix} 
+
+echo "ELPH{q_s + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+sbatch script{_next}.sh
+""".format()
+        else:
+            script4 = f"""#!/bin/sh
+#SBATCH -o qe.out4 -e qe.err4
+#SBATCH -p {system['partition']}
+#SBATCH -J {q_s + 1}_{q_f + 1}e{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
+
+{system['modules']}
+
+echo "ELPH{q_s + 1} to ELPH{q_f + 1} of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/elph{q_s + 1}to{q_f + 1}.in &> $PWD/output.elph{q_s + 1}to{q_f + 1}.{prefix} 
+
+echo "ELPH{q_s + 1} to ELPH{q_f + 1} of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+sbatch script{_next}.sh
+""".format()
+    else:
+        script4 = f"""#!/bin/sh
 #SBATCH -o qe.out4 -e qe.err4
 #SBATCH -p {system['partition']}
 #SBATCH -J e{short}
@@ -324,7 +397,7 @@ echo "ELPH of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
 
 echo "ELPH of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
 
+sbatch script4.sh
 """.format()
-
-    overwrite(path, 'script4.sh', script4, o)
-
+    name = f'script4{q_s + 1}.sh'.format()
+    overwrite(path, name, script4, o)

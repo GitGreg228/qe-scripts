@@ -16,11 +16,11 @@ def parse_system(path):
 
     default_system_2 = {
         "partition": "all",
-        "modules": "module load intel/2017u8\nexport PATH=~/qe-6.6/bin/:$PATH",
+        "modules": "module load intel/2020u2\nexport PATH=~/q-e-qe-6.8/bin/:$PATH",
         "N_pw": 1,
         "n_pw": 36,
-        "N_ph": 2,
-        "n_ph": 72,
+        "N_ph": 1,
+        "n_ph": 36,
         "pp_path": "../PP",
         "mpirun": "srun"
     }
@@ -41,5 +41,5 @@ def parse_system(path):
             system = json.load(json_file)
             json_file.close()
     else:
-        system = default_system_3
+        system = default_system_2
     return system

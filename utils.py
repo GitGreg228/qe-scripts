@@ -335,8 +335,10 @@ def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, 
     for qpoint in qpoints:
         xyz = np.round(qpoint[0], 3).tolist()
         qpoints_dict['  '.join(["%.3f" % k for k in xyz])] = qpoint[1].item()
-    make_4(system, prefix, short, path, o)
-    write_elph_in( masses, mesh_lst, len_qpoints, kpoints, prefix, path, o)
+    if sub:
+        for q in range(len_qpoints):
+            make_4(system, prefix, short, q, q, len_qpoints, path, o)
+            write_elph_in(prefix, masses, mesh_lst, q, q, kpoints, path, o)
     return qpoints_dict
 
 
@@ -370,13 +372,13 @@ def create_meshes(q, tol, path, structure, note, o, kppa, multiplier, sub, nosym
         create_input_scf(_tmp_path, qe_struc, o, kpoints, prefix, short)
         mesh_dict[mesh] = dict()
         mesh_dict[mesh]['space_group'] = qe_struc['sym']
-        if nosym:
-            if mesh == '2x2x2':
-                q_num = 4
-            elif mesh == '3x3x3':
-                q_num = 14
-            elif mesh == '4x4x4':
-                q_num = 32
+        # if nosym:
+        if mesh == '2x2x2':
+            q_num = 4
+        elif mesh == '3x3x3':
+            q_num = 14
+        elif mesh == '4x4x4':
+            q_num = 32
         mesh_dict[mesh]['xyz'] = create_ph_ins(_tmp_path, mesh, mesh_lst, structure,
                                                 kpoints, tol, prefix, short, o, sub, q_num)
         mesh_dict[mesh]['kpoints_scf'] = kpoints

@@ -18,8 +18,51 @@ def write_opt(qe_struc, pressure, dyn, path, o):
     Writing input.opt
     """
     automatic = '{automatic}'
-
-    input_opt = f"""&control
+    if qe_struc['sg_str'] == '1':
+        input_opt = f"""&control
+    calculation='vc-relax'
+    restart_mode='from_scratch',
+    prefix={qe_struc['prefix']},
+    pseudo_dir = '.',
+    outdir='.',
+    wf_collect = .true.,
+    nstep = 9999,
+/
+&system
+        nosym=.TRUE.,
+        ibrav= 0, 
+        celldm(1) = 0, 
+        nat={qe_struc['nat']},
+        ntyp={qe_struc['ntyp']},
+        ecutwfc=80.0,
+        occupations='smearing',
+        degauss=0.015,
+ /
+ &electrons
+    conv_thr =  5.0d-7,
+    mixing_beta = 0.6,
+    electron_maxstep = 9999,
+    diagonalization = 'cg',
+ /
+ &IONS
+  ion_dynamics='bfgs',
+ /
+ &CELL
+   cell_dynamics = 'bfgs',
+   cell_factor = 2.5,
+   press = {pressure},
+   cell_dofree = '{dyn}',
+ /
+ATOMIC_SPECIES
+{qe_struc['species']}
+ATOMIC_POSITIONS (crystal_sg)
+{qe_struc['positions']}
+K_POINTS {automatic}
+ {qe_struc['kpoints']}  {qe_struc['shift']}
+CELL_PARAMETERS (angstrom)
+{qe_struc['lattice']}""".format(automatic=automatic)
+    else:
+        input_opt = f"""&control
     calculation='vc-relax'
     restart_mode='from_scratch',
     prefix={qe_struc['prefix']},

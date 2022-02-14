@@ -222,15 +222,16 @@ def get_contcar(path, o):
                             f'{str(round(E_Ry * k_Ry_eV, 3))} eV',
                             f'{str(round(E_Ry * k_Ry_eV / nat, 3))} eV per atom']
     # Getting lattice constant
+    k_bohr_A = 0.529177249  # 1 bohr = 1 Angstrom
     if 'alat' in lines[idx['c']]:
-        alat = lines[idx['c']].split()[-1].replace(')', '')
+        alat = float(lines[idx['c']].split()[-1].replace(')', '')) * k_bohr_A
     else:
-        alat = '1'
+        alat = 1
     # Getting lattice vectors
     lattice = lines[idx['c']+1:idx['a']-1]
     lattice_str = list()
     for vec in lattice:
-        _vec = vec.split()
+        _vec = [str(float(v) * alat) for v in vec.split()]
         lattice_str.append('\t'.join(['', *_vec]))
     lattice_str = '\n'.join(lattice_str)
     # Getting atoms positions
@@ -258,7 +259,7 @@ def get_contcar(path, o):
     energy = ' '.join(struc_summ['energy'])
     prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}, E = {energy}'
 
-    contcar = [prefix_str, alat, lattice_str,
+    contcar = [prefix_str, '1.0', lattice_str,
                '\t'.join(['', *species_names]), '\t'.join(['', *species_numbers]),
                'Direct', atoms_str]
     content = '\n'.join(contcar)
@@ -297,8 +298,8 @@ def reverse_summary(summary):
     return reversed_summary
 
 
-def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn, primitive=True):
-    qe_struc = get_qe_struc(structure, tol, kppa, primitive=primitive)
+def create_input_opt(tol, path, structure, note, o, pressure, kppa, dyn, primitive=True, nosym=True):
+    qe_struc = get_qe_struc(structure, tol, kppa, primitive=primitive, nosym=nosym)
     write_opt(qe_struc, pressure, dyn, path, o)
     system = parse_system(path)
     copy_pp(system, path)

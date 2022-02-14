@@ -1,7 +1,7 @@
 from pymatgen.core.structure import IStructure
 import argparse
 
-from inputs import *
+from utils import *
 
 """
 Parsing arguments
@@ -16,6 +16,7 @@ parser.add_argument('--o', type=boolean_string, default=True, help='Overwrite al
 parser.add_argument('--press', nargs='+', default=[2000], help='Pressure(s) in kBar')
 parser.add_argument('--kppa', type=int, default=300, help='K-points per unit volume')
 parser.add_argument('--primitive', default=True, type=boolean_string, help='if print primitive structure')
+parser.add_argument('--nosym', default=True, type=boolean_string, help='Use no symmetry in calculations')
 parser.add_argument('--dyn', type=str, default='all', help='cell dynamics')
 args = parser.parse_args()
 
@@ -44,7 +45,7 @@ if args.primitive:
 if len(args.press) == 1:
     print('Only one pressure is given, output files will be created right here.')
     pressure = arr_str(args.press)
-    create_input_opt(args.tol, pwd, structure, args.note, args.o, pressure, args.kppa, args.dyn)
+    create_input_opt(args.tol, pwd, structure, args.note, args.o, pressure, args.kppa, args.dyn, args.nosym)
 elif len(args.press) > 1:
     print('Multiple pressures are given, creating folder for each pressure...')
     for p in args.press:
@@ -53,5 +54,5 @@ elif len(args.press) > 1:
             os.mkdir(tmp_path)
         note = '_' + p + '_' + args.note
         pressure = arr_str(p)
-        create_input_opt(args.tol, tmp_path, structure, note, args.o, pressure, args.kppa, args.dyn, args.primitive)
+        create_input_opt(args.tol, tmp_path, structure, note, args.o, pressure, args.kppa, args.dyn, args.primitive, args.nosym)
 

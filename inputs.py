@@ -55,7 +55,7 @@ def write_opt(qe_struc, pressure, dyn, path, o):
  /
 ATOMIC_SPECIES
 {qe_struc['species']}
-ATOMIC_POSITIONS (crystal_sg)
+ATOMIC_POSITIONS (crystal)
 {qe_struc['positions']}
 K_POINTS {automatic}
  {qe_struc['kpoints']}  {qe_struc['shift']}

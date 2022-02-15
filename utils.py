@@ -339,6 +339,9 @@ def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, 
         for q in range(len_qpoints):
             make_4(system, prefix, short, q, q, len_qpoints, path, o)
             write_elph_in(prefix, masses, mesh_lst, q, q, kpoints, path, o)
+    else:
+        make_4(system, prefix, short, 0, None, len_qpoints, path, o)
+        write_elph_in(prefix, masses, mesh_lst, 0, None, kpoints, path, o)
     return qpoints_dict
 
 

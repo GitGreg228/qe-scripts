@@ -231,7 +231,8 @@ def get_contcar(path, o):
     lattice = lines[idx['c']+1:idx['a']-1]
     lattice_str = list()
     for vec in lattice:
-        _vec = [str(float(v) * alat) for v in vec.split()]
+        _vec = vec.split()
+        #_vec = [str(float(v) * alat) for v in vec.split()]
         lattice_str.append('\t'.join(['', *_vec]))
     lattice_str = '\n'.join(lattice_str)
     # Getting atoms positions

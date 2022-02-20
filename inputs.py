@@ -444,3 +444,36 @@ sbatch script4.sh
 """.format()
     name = f'script4{q_s + 1}.sh'.format()
     overwrite(path, name, script4, o)
+
+
+def make_all(system, prefix, short, path, o):
+    script = f"""#!/bin/sh
+#SBATCH -o qe.out -e qe.err
+#SBATCH -p {system['partition']}
+#SBATCH -J a{short}
+#SBATCH -N {system['N_ph']}
+#SBATCH -n {system['n_ph']}
+
+{system['modules']}
+
+echo "SCF of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which pw.x) -in $PWD/input.scf &> $PWD/output.scf.{prefix} 
+
+echo "SCF of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+echo "PH of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/ph.in &> $PWD/output.ph.{prefix} 
+
+echo "PH of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+echo "ELPH of {prefix} LAUNCHED at" $(date) | tee -a log.{prefix}
+
+{system['mpirun']} $(which ph.x) -in $PWD/elph.in &> $PWD/output.elph.{prefix} 
+
+echo "ELPH of {prefix} STOPPED at" $(date) | tee -a log.{prefix} 
+
+""".format()
+    name = f'script_all.sh'.format()
+    overwrite(path, name, script, o)

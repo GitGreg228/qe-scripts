@@ -314,6 +314,7 @@ def create_input_scf(path, qe_struc, o, kpoints, prefix, short, shift='0 0 0'):
     system = parse_system(path)
     copy_pp(system, path)
     make_2(system, prefix, short, path, o)
+    make_all(system, prefix, short, path, o)
 
 
 def create_ph_ins(path, mesh, mesh_lst, structure, kpoints, tol, prefix, short, o, sub, q_num=False):

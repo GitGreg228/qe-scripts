@@ -9,7 +9,7 @@ def parse_system(path):
         "N_pw": 1,
         "n_pw": 8,
         "N_ph": 1,
-        "n_ph": 40,
+        "n_ph": 20,
         "pp_path": "../PP",
         "mpirun": "$(which mpirun)"
     }

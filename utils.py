@@ -193,6 +193,8 @@ def get_contcar(path, o):
     for i, line in enumerate(lines):
         if 'Begin final coordinates' in line:
             idx['s'] = i
+        if '!    total energy' in line:
+            idx['t'] = i
     for i in range(idx['s'], len(lines)):
         if 'CELL_PARAMETERS' in lines[i]:
             idx['c'] = i
@@ -204,8 +206,6 @@ def get_contcar(path, o):
             idx['a'] = i
         if 'End final coordinates' in lines[i]:
             idx['f'] = i
-        if '!    total energy' in lines[i]:
-            idx['t'] = i
     if idx['s'] == 0:
         message = f'Warning! No final coordinates found in {path}! Creating CONTCAR from last relaxation step.'.format()
         print(message)

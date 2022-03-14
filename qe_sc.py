@@ -45,7 +45,7 @@ if args.primitive:
 if len(args.press) == 1:
     print('Only one pressure is given, output files will be created right here.')
     pressure = arr_str(args.press)
-    create_input_opt(args.tol, pwd, structure, args.note, args.o, pressure, args.kppa, args.dyn, args.nosym)
+    create_input_opt(args.tol, pwd, structure, args.note, args.o, pressure, args.kppa, args.dyn, args.primitive, args.nosym)
 elif len(args.press) > 1:
     print('Multiple pressures are given, creating folder for each pressure...')
     for p in args.press:

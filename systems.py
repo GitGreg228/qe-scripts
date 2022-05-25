@@ -5,7 +5,7 @@ import os
 def parse_system(path):
     default_system_1 = {
         "partition": "lenovo",
-        "modules": "module load intel2021/tbb/2021.2.0 intel2021/compiler-rt/2021.2.0 intel2021/mpi/2021.2.0 intel2021/debugger/10.1.1 intel2021/compiler/2021.2.0 intel2021/mkl/2021.2.0\nexport PATH=~/programs/qe-7.0/bin/:$PATH",
+        "modules": "module load intel2021/mpi/latest intel2021/compiler-rt/2021.2.0 intel2021/tbb/2021.2.0 intel2021/mkl/latest\nexport UCX_TLS=ud,sm,self\nexport PATH=~/programs/qe-7.0/bin/:$PATH",
         "N_pw": 1,
         "n_pw": 8,
         "N_ph": 1,

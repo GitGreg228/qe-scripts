@@ -74,15 +74,18 @@ def analyze_symmetry(structure, tol_max, tol_step, save_cif, path):
     tols = dict()
     for tol in np.arange(0.01, tol_max, tol_step):
         analyzer = SpacegroupAnalyzer(structure, symprec=tol)
-        number = analyzer.get_space_group_number()
-        if number > prev_number:
-            symbol = analyzer.get_space_group_symbol()
-            tols["{:0.2f}".format(tol)] = str(number) + '(' + symbol + ')'
-            if save_cif:
-                name = f'{formulas(structure)[0]}_{os.path.basename(path)}' \
-                       f'_{analyzer.get_space_group_number()}.cif'.format()
-                CifWriter(analyzer.get_symmetrized_structure(), symprec=tol).write_file(os.path.join(path, name))
-        prev_number = number
+        try:
+            number = analyzer.get_space_group_number()
+            if number > prev_number:
+                symbol = analyzer.get_space_group_symbol()
+                tols["{:0.2f}".format(tol)] = str(number) + '(' + symbol + ')'
+                if save_cif:
+                    name = f'{formulas(structure)[0]}_{os.path.basename(path)}' \
+                           f'_{analyzer.get_space_group_number()}.cif'.format()
+                    CifWriter(analyzer.get_symmetrized_structure(), symprec=tol).write_file(os.path.join(path, name))
+            prev_number = number
+        except TypeError:
+            pass
     return tols
 
 

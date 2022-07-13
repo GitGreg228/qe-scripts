@@ -263,7 +263,7 @@ def get_contcar(path, o):
     energy = ' '.join(struc_summ['energy'])
     prefix_str = f'{prefix} relaxed by QE, V = {volume}, rho = {density}, E = {energy}'
 
-    contcar = [prefix_str, '1.0', lattice_str,
+    contcar = [prefix_str, str(alat), lattice_str,
                '\t'.join(['', *species_names]), '\t'.join(['', *species_numbers]),
                'Direct', atoms_str]
     content = '\n'.join(contcar)
